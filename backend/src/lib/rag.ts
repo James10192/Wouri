@@ -1,5 +1,6 @@
 import { generateRAGResponse } from "@/services/groq";
 import { searchSimilarDocuments, getTextEmbedding } from "@/services/supabase";
+import { getWeatherContext, getWeatherAdvice } from "@/services/weather";
 import type { RAGResponse } from "@/types";
 
 /**
@@ -39,10 +40,23 @@ export async function ragPipeline(
     }
 
     // Step 4: Build context from retrieved documents
-    const context = buildContext(similarDocs);
+    let context = buildContext(similarDocs);
+
+    // Step 4.5: Add weather data (if available)
+    const weatherContext = await getWeatherContext(userRegion);
+    const weatherAdvice = await getWeatherAdvice(userRegion);
+
+    if (weatherContext) {
+      context += `\n\n[DONNÉES MÉTÉO ACTUELLES]\n${weatherContext}\n`;
+    }
 
     // Step 5: Generate answer using Groq (FREE & FAST!)
     const response = await generateRAGResponse(question, context, userRegion, language);
+
+    // Step 6: Add weather advice if relevant
+    if (weatherAdvice && response.answer) {
+      response.answer += weatherAdvice;
+    }
 
     console.log(`[RAG] ✅ Response generated in ${response.metadata.response_time_ms}ms`);
 

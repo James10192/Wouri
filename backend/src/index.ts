@@ -3,6 +3,7 @@ import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { config } from "@/lib/config";
 import webhooks from "@/routes/webhooks";
+import test from "@/routes/test";
 
 /**
  * Wouri Bot Backend
@@ -53,6 +54,11 @@ app.get("/health", (c) => {
 // Webhooks (WhatsApp + FedaPay)
 app.route("/webhooks", webhooks);
 
+// Test routes (Development only)
+if (config.NODE_ENV === "development") {
+  app.route("/test", test);
+}
+
 // ============================================================================
 // Error Handler
 // ============================================================================
@@ -80,6 +86,15 @@ app.notFound((c) => {
 
 const port = parseInt(config.PORT, 10);
 
+const testEndpoints = config.NODE_ENV === "development" ? `
+║  🧪 Test Endpoints (dev only):                            ║
+║    GET  /test/health       - Test server                  ║
+║    POST /test/chat         - Test RAG (body: {question})  ║
+║    GET  /test/groq         - Test Groq API                ║
+║    GET  /test/supabase     - Test Supabase connection     ║
+║    GET  /test/weather      - Test OpenWeatherMap          ║
+║                                                            ║` : '';
+
 console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
@@ -89,13 +104,12 @@ console.log(`
 ║  Port: ${port}                                             ║
 ║  Environment: ${config.NODE_ENV}                           ║
 ║                                                            ║
-║  Endpoints:                                                ║
+║  Production Endpoints:                                     ║
 ║    GET  /                  - API info                      ║
 ║    GET  /health            - Health check                  ║
 ║    GET  /webhooks/whatsapp - Webhook verification          ║
 ║    POST /webhooks/whatsapp - Receive WhatsApp messages     ║
-║    POST /webhooks/fedapay  - Payment notifications         ║
-║                                                            ║
+║    POST /webhooks/fedapay  - Payment notifications         ║${testEndpoints}
 ╚════════════════════════════════════════════════════════════╝
 `);
 
