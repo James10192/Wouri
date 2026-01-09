@@ -87,6 +87,7 @@ export interface RAGDocument {
 
 export interface RAGResponse {
   answer: string;
+  reasoning?: string;
   sources: Array<{
     source: string;
     page?: number;
@@ -96,6 +97,11 @@ export interface RAGResponse {
     model: string;
     tokens_used: number;
     response_time_ms: number;
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      reasoningTokens?: number;
+    };
   };
 }
 

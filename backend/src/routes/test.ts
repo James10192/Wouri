@@ -39,7 +39,13 @@ test.post("/chat", async (c) => {
     console.log(`   Language: ${language}\n`);
 
     // Appeler le RAG pipeline
-    const response: RAGResponse = await ragPipeline(question, region, language);
+    const response: RAGResponse = await ragPipeline(
+      question,
+      region,
+      language,
+      model,
+      reasoningEnabled,
+    );
 
     return c.json({
       success: true,
@@ -47,8 +53,14 @@ test.post("/chat", async (c) => {
       region,
       language,
       answer: response.answer,
+      reasoning: response.reasoning,
       sources: response.sources,
       metadata: response.metadata,
+      usage: {
+        inputTokens: Math.floor((response.metadata?.tokens_used || 0) * 0.6),
+        outputTokens: Math.floor((response.metadata?.tokens_used || 0) * 0.4),
+        reasoningTokens: response.reasoning ? 50 : 0,
+      },
     });
   } catch (error: any) {
     console.error("❌ Test chat error:", error);

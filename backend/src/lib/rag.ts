@@ -11,6 +11,8 @@ export async function ragPipeline(
   question: string,
   userRegion: string,
   language: string = "fr",
+  model?: string,
+  reasoningEnabled?: boolean,
 ): Promise<RAGResponse> {
   console.log(`[RAG] Processing question for region: ${userRegion}, language: ${language}`);
 
@@ -51,7 +53,14 @@ export async function ragPipeline(
     }
 
     // Step 5: Generate answer using Groq (FREE & FAST!)
-    const response = await generateRAGResponse(question, context, userRegion, language);
+    const response = await generateRAGResponse(
+      question,
+      context,
+      userRegion,
+      language,
+      model,
+      reasoningEnabled,
+    );
 
     // Step 6: Add weather advice if relevant
     if (weatherAdvice && response.answer) {

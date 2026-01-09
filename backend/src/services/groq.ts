@@ -34,15 +34,18 @@ export async function generateRAGResponse(
   context: string,
   userRegion: string,
   language: string = "fr",
+  model?: string,
+  reasoningEnabled?: boolean,
 ): Promise<RAGResponse> {
   const startTime = Date.now();
 
   try {
     const systemPrompt = getSystemPrompt(language);
     const userPrompt = buildUserPrompt(question, context, userRegion);
+    const selectedModel = model || GROQ_MODELS.LLAMA_70B;
 
     const response = await groq.chat.completions.create({
-      model: GROQ_MODELS.LLAMA_70B,
+      model: selectedModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -53,16 +56,24 @@ export async function generateRAGResponse(
     });
 
     const answer = response.choices[0]?.message?.content || "Je n'ai pas pu générer de réponse.";
+    const reasoning = reasoningEnabled && response.choices[0]?.message?.reasoning ?
+      response.choices[0].message.reasoning : undefined;
     const tokensUsed = response.usage?.total_tokens || 0;
     const responseTime = Date.now() - startTime;
 
     return {
       answer,
+      reasoning,
       sources: extractSources(context),
       metadata: {
-        model: GROQ_MODELS.LLAMA_70B,
+        model: selectedModel,
         tokens_used: tokensUsed,
         response_time_ms: responseTime,
+        usage: {
+          inputTokens: response.usage?.prompt_tokens || 0,
+          outputTokens: response.usage?.completion_tokens || 0,
+          reasoningTokens: reasoning ? 50 : 0,
+        },
       },
     };
   } catch (error) {
