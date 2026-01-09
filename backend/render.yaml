@@ -1,0 +1,31 @@
+services:
+  # Wouri Bot Backend - Bun + Hono
+  - type: web
+    name: wouribot-backend
+    runtime: docker
+    plan: free # FREE TIER
+    region: frankfurt # Closest to Côte d'Ivoire
+    branch: main
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Add other env vars in Render Dashboard UI (they are secrets)
+      # SUPABASE_URL, SUPABASE_ANON_KEY, GROQ_API_KEY, etc.
+    healthCheckPath: /health
+    autoDeploy: true
+
+# Alternative: Use Bun native (no Docker) - if Render supports Bun
+# Uncomment if Render adds native Bun support:
+#
+# - type: web
+#   name: wouribot-backend
+#   runtime: node # Will be 'bun' when supported
+#   plan: free
+#   buildCommand: bun install
+#   startCommand: bun src/index.ts
+#   envVars:
+#     - key: NODE_ENV
+#       value: production

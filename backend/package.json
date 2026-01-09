@@ -1,0 +1,30 @@
+{
+  "name": "wouribot-backend",
+  "version": "1.0.0",
+  "description": "Wouri Bot Backend - WhatsApp RAG Agriculture Bot (Bun + Hono + TypeScript)",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "build": "bun build src/index.ts --outdir ./dist --target bun",
+    "test": "bun test",
+    "lint": "bunx @biomejs/biome check src/",
+    "format": "bunx @biomejs/biome format --write src/"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "@hono/node-server": "^1.13.7",
+    "@supabase/supabase-js": "^2.47.10",
+    "groq-sdk": "^0.8.0",
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.24.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "^1.1.14",
+    "bun-types": "^1.1.38"
+  },
+  "engines": {
+    "bun": ">=1.1.0"
+  }
+}

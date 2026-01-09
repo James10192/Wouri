@@ -1,0 +1,128 @@
+import { z } from "zod";
+
+// ============================================================================
+// Environment Variables Schema
+// ============================================================================
+export const envSchema = z.object({
+  // Server
+  PORT: z.string().default("3000"),
+  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+
+  // Supabase
+  SUPABASE_URL: z.string().url(),
+  SUPABASE_ANON_KEY: z.string().min(1),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+
+  // Groq API (FREE)
+  GROQ_API_KEY: z.string().startsWith("gsk_"),
+
+  // WhatsApp
+  WHATSAPP_ACCESS_TOKEN: z.string().min(1),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().min(1),
+  WHATSAPP_APP_SECRET: z.string().min(1),
+  WHATSAPP_VERIFY_TOKEN: z.string().min(1),
+
+  // FedaPay
+  FEDAPAY_SECRET_KEY: z.string().min(1),
+  FEDAPAY_PUBLIC_KEY: z.string().min(1),
+
+  // OpenWeatherMap
+  OPENWEATHER_API_KEY: z.string().min(1),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+// ============================================================================
+// WhatsApp Types
+// ============================================================================
+export const messageTypeSchema = z.enum(["text", "audio", "image"]);
+export type MessageType = z.infer<typeof messageTypeSchema>;
+
+export const whatsappMessageSchema = z.object({
+  wa_id: z.string().min(10),
+  phone_number: z.string().regex(/^\+\d{10,15}$/),
+  message: z.string().max(4096),
+  message_type: messageTypeSchema,
+  timestamp: z.string().datetime(),
+});
+
+export type WhatsAppMessage = z.infer<typeof whatsappMessageSchema>;
+
+// ============================================================================
+// User Types
+// ============================================================================
+export const userLanguageSchema = z.enum(["fr", "dioula", "baoulé"]);
+export type UserLanguage = z.infer<typeof userLanguageSchema>;
+
+export const subscriptionStatusSchema = z.enum(["freemium", "premium", "blocked"]);
+export type SubscriptionStatus = z.infer<typeof subscriptionStatusSchema>;
+
+export interface User {
+  id: string;
+  wa_id: string;
+  phone_number: string;
+  preferred_language: UserLanguage;
+  region: string | null;
+  subscription_status: SubscriptionStatus;
+  subscription_end_date: string | null;
+  monthly_quota_used: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================================
+// RAG Types
+// ============================================================================
+export interface RAGDocument {
+  id: string;
+  content: string;
+  metadata: {
+    source: string;
+    page?: number;
+    region?: string;
+    category?: string;
+  };
+  embedding?: number[];
+}
+
+export interface RAGResponse {
+  answer: string;
+  sources: Array<{
+    source: string;
+    page?: number;
+    similarity: number;
+  }>;
+  metadata: {
+    model: string;
+    tokens_used: number;
+    response_time_ms: number;
+  };
+}
+
+// ============================================================================
+// Error Types
+// ============================================================================
+export class WouribotError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number = 500,
+    public code?: string,
+  ) {
+    super(message);
+    this.name = "WouribotError";
+  }
+}
+
+export class SubscriptionExpiredError extends WouribotError {
+  constructor(wa_id: string) {
+    super(`Subscription expired for user ${wa_id}`, 402, "SUBSCRIPTION_EXPIRED");
+    this.name = "SubscriptionExpiredError";
+  }
+}
+
+export class RAGRetrievalError extends WouribotError {
+  constructor(message: string) {
+    super(message, 500, "RAG_RETRIEVAL_FAILED");
+    this.name = "RAGRetrievalError";
+  }
+}

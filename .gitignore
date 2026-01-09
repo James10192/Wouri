@@ -1,0 +1,152 @@
+# ============================================================================
+# Wouri Bot - .gitignore
+# ============================================================================
+
+# ============================================================================
+# SECRETS & ENVIRONMENT (CRITIQUE - Ne JAMAIS commit!)
+# ============================================================================
+.env
+.env.local
+.env.production
+.env.*.local
+*.env
+*.key
+*.pem
+*.p12
+*-key.json
+credentials.json
+service-account.json
+
+# ============================================================================
+# Dependencies
+# ============================================================================
+
+# Node.js / Bun
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun.lockb
+.bun/
+
+# Python (ancien backend)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.poetry/
+*.egg-info/
+dist/
+build/
+
+# ============================================================================
+# Build Outputs
+# ============================================================================
+
+# Next.js (frontend)
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Bun backend
+backend/dist/
+backend/build/
+
+# Python backend (archived)
+backend-oldPython/
+
+# ============================================================================
+# Logs
+# ============================================================================
+*.log
+logs/
+*.log.*
+
+# ============================================================================
+# Testing
+# ============================================================================
+coverage/
+*.coverage
+.nyc_output/
+.pytest_cache/
+htmlcov/
+test-results/
+junit.xml
+
+# ============================================================================
+# OS Files
+# ============================================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*~
+.directory
+.Trash-*
+
+# ============================================================================
+# IDE & Editors
+# ============================================================================
+.vscode/
+.idea/
+*.code-workspace
+*.iml
+*.iws
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# ============================================================================
+# Temporary Files
+# ============================================================================
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.cache
+
+# ============================================================================
+# Databases (local)
+# ============================================================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# ============================================================================
+# Deployment
+# ============================================================================
+.vercel/
+.netlify/
+.aws/
+.terraform/
+
+# ============================================================================
+# Projet Spécifique
+# ============================================================================
+
+# Ancien backend Python (archivé)
+backend-oldPython/
+
+# Autres projets dans workspace (à ne pas commit)
+B-mad/
+BIT-PROJECT-LYLY/
+ITM-website/
+KLASSCIv2/
+Net-Pro-Project/
+Vision/
+klassciMaster/
+smartlink/
+
+# Documentation temporaire
+docs/text
