@@ -626,7 +626,7 @@ const ChatBotDemo = () => {
                       <ModelSelectorLogo provider="groq" />
                       <ModelSelectorName>
                         {modelItem.name}
-                        {modelItem.reasoningSupported && " ⚡"}
+                        {modelItem.reasoningSupported && " (Raisonnement)"}
                       </ModelSelectorName>
                     </ModelSelectorItem>
                   ))}
