@@ -80,21 +80,25 @@ const fallbackModels = [
     name: "Llama 3.3 70B Versatile",
     value: "llama-3.3-70b-versatile",
     reasoningSupported: false,
+    contextWindow: 8192,
   },
   {
     name: "Llama 3.1 8B Instant",
     value: "llama-3.1-8b-instant",
     reasoningSupported: false,
+    contextWindow: 8192,
   },
   {
     name: "Mixtral 8x7B",
     value: "mixtral-8x7b-32768",
     reasoningSupported: false,
+    contextWindow: 32768,
   },
   {
     name: "Qwen 3 32B (Reasoning)",
     value: "qwen/qwen3-32b",
     reasoningSupported: true,
+    contextWindow: 32768,
   },
 ]
 
@@ -271,6 +275,7 @@ const ChatBotDemo = () => {
             id: string
             active?: boolean
             reasoning_supported?: boolean
+            context_window?: number
           }>
         }
         const modelsFromApi =
@@ -280,6 +285,7 @@ const ChatBotDemo = () => {
               name: modelItem.id,
               value: modelItem.id,
               reasoningSupported: Boolean(modelItem.reasoning_supported),
+              contextWindow: modelItem.context_window,
             })) || []
         if (modelsFromApi.length > 0) {
           setAvailableModels(modelsFromApi)
@@ -340,11 +346,9 @@ const ChatBotDemo = () => {
     return sum + usage.inputTokens + usage.outputTokens
   }, 0)
 
-  const modelMaxTokens: Record<string, number> = {
-    "llama-3.3-70b-versatile": 8192,
-    "mixtral-8x7b-32768": 32768,
-    "qwen/qwen3-32b": 32768,
-  }
+  const modelMaxTokens =
+    availableModels.find((modelItem) => modelItem.value === model)
+      ?.contextWindow || 8192
 
   // Get suggestions based on last message
   function getRelatedSuggestions(message: any): string[] {
@@ -600,7 +604,7 @@ const ChatBotDemo = () => {
                 {/* Context component for token tracking */}
                 <Context
                   usedTokens={totalTokensUsed}
-                  maxTokens={modelMaxTokens[model] || 8192}
+                  maxTokens={modelMaxTokens}
                   usage={(messages[messages.length - 1] as any)?.metadata?.usage}
                   modelId={model}
                 >

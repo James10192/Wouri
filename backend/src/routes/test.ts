@@ -33,6 +33,7 @@ test.post("/chat", async (c) => {
       language = "fr",
       model,
       reasoningEnabled = false,
+      history = [],
     } = body;
 
     if (!question) {
@@ -53,6 +54,7 @@ test.post("/chat", async (c) => {
       language,
       model,
       reasoningEnabled,
+      history,
     );
 
     return c.json({

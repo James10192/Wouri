@@ -36,6 +36,7 @@ export async function generateRAGResponse(
   language: string = "fr",
   model?: string,
   reasoningEnabled?: boolean,
+  conversationContext?: string,
 ): Promise<RAGResponse> {
   const startTime = Date.now();
   const hasContext = context.length > 0;
@@ -43,8 +44,8 @@ export async function generateRAGResponse(
   try {
     const systemPrompt = getSystemPrompt(language, hasContext);
     const userPrompt = hasContext
-      ? buildUserPrompt(question, context, userRegion)
-      : `QUESTION: ${question}\n\nRéponds de manière amicale et encourage l'utilisateur à poser des questions sur l'agriculture ivoirienne.`;
+      ? buildUserPrompt(question, context, userRegion, conversationContext)
+      : buildNoContextPrompt(question, conversationContext);
     const selectedModel = model || GROQ_MODELS.LLAMA_70B;
     const shouldExtractReasoning =
       Boolean(reasoningEnabled) && isReasoningModel(selectedModel);
@@ -192,15 +193,29 @@ RÈGLES:
 /**
  * Build user prompt with context and question
  */
-function buildUserPrompt(question: string, context: string, userRegion: string): string {
+function buildUserPrompt(
+  question: string,
+  context: string,
+  userRegion: string,
+  conversationContext?: string,
+): string {
   return `CONTEXTE DOCUMENTAIRE:
 ${context}
 
-RÉGION DE L'UTILISATEUR: ${userRegion}
+${conversationContext ? `${conversationContext}\n\n` : ""}RÉGION DE L'UTILISATEUR: ${userRegion}
 
 QUESTION: ${question}
 
 Réponds en te basant UNIQUEMENT sur le contexte ci-dessus. Adapte ta réponse à la région ${userRegion}.`;
+}
+
+function buildNoContextPrompt(
+  question: string,
+  conversationContext?: string,
+): string {
+  return `${conversationContext ? `${conversationContext}\n\n` : ""}QUESTION: ${question}
+
+Réponds de manière amicale et encourage l'utilisateur à poser des questions sur l'agriculture ivoirienne.`;
 }
 
 /**

@@ -23,9 +23,28 @@ function extractUserQuestion(messages: UIMessage[]) {
   return textParts.join(" ").trim()
 }
 
+function extractConversationHistory(messages: UIMessage[]) {
+  if (messages.length === 0) return []
+  const lastUserIndex = [...messages].map((m) => m.role).lastIndexOf("user")
+  const historySlice =
+    lastUserIndex > 0 ? messages.slice(0, lastUserIndex) : []
+
+  return historySlice
+    .flatMap((message) =>
+      message.parts
+        .filter((part) => part.type === "text")
+        .map((part) => ({
+          role: message.role,
+          content: part.text,
+        }))
+    )
+    .slice(-6)
+}
+
 export async function POST(req: Request) {
   const body = (await req.json()) as ChatBody
   const question = extractUserQuestion(body.messages || [])
+  const history = extractConversationHistory(body.messages || [])
 
   if (!question) {
     return new Response("Missing user question.", { status: 400 })
@@ -45,6 +64,7 @@ export async function POST(req: Request) {
       language: body.language,
       model: body.model,
       reasoningEnabled: body.reasoningEnabled,
+      history,
     }),
   })
 

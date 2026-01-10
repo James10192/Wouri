@@ -18,6 +18,7 @@ export async function ragPipeline(
   language: string = "fr",
   model?: string,
   reasoningEnabled?: boolean,
+  history: Array<{ role: string; content: string }> = [],
 ): Promise<RAGResponse> {
   console.log(`[RAG] Processing question for region: ${userRegion}, language: ${language}`);
 
@@ -25,6 +26,7 @@ export async function ragPipeline(
     const regionFilter = shouldFilterRegion(userRegion)
       ? { region: userRegion }
       : undefined;
+    const conversationContext = buildConversationContext(history);
     const toolInvocations: Array<{
       toolName: string;
       args?: Record<string, unknown>;
@@ -34,7 +36,10 @@ export async function ragPipeline(
     }> = [];
 
     // Step 1: Generate embedding for the question
-    const embedding = await getTextEmbedding(question);
+    const augmentedQuery = conversationContext
+      ? `${conversationContext}\n\n${question}`
+      : question;
+    const embedding = await getTextEmbedding(augmentedQuery);
 
     // Step 2: Search similar documents in Supabase pgvector
     const similarDocs = await searchSimilarDocuments(
@@ -64,6 +69,7 @@ export async function ragPipeline(
       state: "output-available",
       args: {
         query: question,
+        context: conversationContext || undefined,
         match_threshold: 0.7,
         match_count: 5,
         filter: regionFilter || {},
@@ -86,7 +92,7 @@ export async function ragPipeline(
     // Step 3: Check if we found relevant documents
     if (relevantDocs.length === 0 || invalidSimilarity || topSimilarity < 0.7) {
       const keywordDocs = await searchDocumentsByKeyword(
-        question,
+        augmentedQuery,
         5,
         regionFilter,
       );
@@ -98,6 +104,7 @@ export async function ragPipeline(
           state: "output-available",
           args: {
             query: question,
+            context: conversationContext || undefined,
             match_count: 5,
             filter: regionFilter || {},
           },
@@ -111,15 +118,16 @@ export async function ragPipeline(
           },
         });
       } else {
-        // Small-talk detected: generate response with Groq (no RAG context)
-        console.log("[RAG] ⚡ Small-talk detected, using Groq without RAG context");
+        // No relevant documents: respond without RAG context but keep conversation memory
+        console.log("[RAG] ⚠️ No relevant documents found, using general response");
         const smallTalkResponse = await generateRAGResponse(
           question,
-        "", // No context for small-talk
-        userRegion,
-        language,
-        model,
-        reasoningEnabled,
+          "", // No context for small-talk
+          userRegion,
+          language,
+          model,
+          reasoningEnabled,
+          conversationContext,
         );
         return {
           ...smallTalkResponse,
@@ -150,6 +158,7 @@ export async function ragPipeline(
       language,
       model,
       reasoningEnabled,
+      conversationContext,
     );
 
     // Step 6: Add weather advice if relevant
@@ -192,6 +201,24 @@ ${doc.content}
 `;
     })
     .join("\n");
+}
+
+function buildConversationContext(
+  history: Array<{ role: string; content: string }>,
+): string {
+  if (!history.length) {
+    return "";
+  }
+
+  const trimmed = history
+    .filter((entry) => entry.content)
+    .map((entry) => {
+      const role = entry.role === "assistant" ? "Assistant" : "Utilisateur";
+      return `${role}: ${entry.content}`;
+    })
+    .join("\n");
+
+  return trimmed ? `Contexte conversationnel:\n${trimmed}` : "";
 }
 
 function shouldFilterRegion(region: string): boolean {
