@@ -60,17 +60,6 @@ import { Sidebar } from "@/components/sidebar/sidebar"
 import { useConversationStore } from "@/lib/conversation-store"
 import { parseTextWithCitations } from "@/lib/citation-parser"
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool"
-import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorInput,
-  ModelSelectorList,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorItem,
-  ModelSelectorLogo,
-  ModelSelectorName,
-} from "@/components/ai-elements/model-selector"
 
 const fallbackModels = [
   {
@@ -103,7 +92,6 @@ const ChatBotDemo = () => {
     Record<string, string>
   >({})
   const [reasoningEnabled, setReasoningEnabled] = useState(false)
-  const [showModelSelector, setShowModelSelector] = useState(false)
   const {
     messages,
     sendMessage,
@@ -304,7 +292,13 @@ const ChatBotDemo = () => {
   return (
     <div className="h-screen w-full">
       <div className="flex h-full w-full">
-        <Sidebar onNewConversation={handleNewConversation} currentModel={selectedModelLabel} />
+        <Sidebar
+          onNewConversation={handleNewConversation}
+          currentModel={selectedModelLabel}
+          availableModels={availableModels}
+          model={model}
+          setModel={setModel}
+        />
 
         <main className="flex h-full min-w-0 flex-1 flex-col p-4">
           <Conversation className="h-full w-full">
@@ -369,9 +363,7 @@ const ChatBotDemo = () => {
                         return (
                           <Message key={`${message.id}-${i}`} from={message.role}>
                             <MessageContent>
-                              <MessageResponse>
-                                <div>{parseTextWithCitations(part.text)}</div>
-                              </MessageResponse>
+                              <MessageResponse>{part.text}</MessageResponse>
                               {message.role === "assistant" && (
                                 <div className="mt-2 text-xs text-muted-foreground">
                                   Modele:{" "}
@@ -425,13 +417,13 @@ const ChatBotDemo = () => {
                               state={toolData.state || "complete"}
                             />
                             <ToolContent>
-                              <ToolInput>
+                              <ToolInput input={toolData.args || {}}>
                                 <div className="space-y-1 text-sm">
                                   <p><strong>Question:</strong> {toolData.result?.query || "N/A"}</p>
                                   <p><strong>Embedding:</strong> <code className="text-xs">{JSON.stringify(toolData.result?.embedding_preview)}</code></p>
                                 </div>
                               </ToolInput>
-                              <ToolOutput>
+                              <ToolOutput result={toolData.result || {}}>
                                 <div className="space-y-2">
                                   <p className="font-medium">Documents trouvés:</p>
                                   {toolData.result?.results?.map((doc: any, idx: number) => (
@@ -499,18 +491,6 @@ const ChatBotDemo = () => {
             </PromptInputBody>
             <PromptInputFooter>
               <PromptInputTools>
-                {/* Model Selector Button */}
-                <PromptInputButton
-                  variant="ghost"
-                  onClick={() => setShowModelSelector(true)}
-                  title="Changer le modèle"
-                >
-                  <ModelSelectorLogo provider="groq" size={16} />
-                  <span className="text-sm truncate max-w-[150px]">
-                    {selectedModelLabel}
-                  </span>
-                </PromptInputButton>
-
                 <PromptInputActionMenu>
                   <PromptInputActionMenuTrigger />
                   <PromptInputActionMenuContent>
@@ -550,34 +530,6 @@ const ChatBotDemo = () => {
           </PromptInput>
         </main>
       </div>
-
-      {/* Model Selector Dialog */}
-      <ModelSelector open={showModelSelector} onOpenChange={setShowModelSelector}>
-        <ModelSelectorContent title="Sélectionner un modèle">
-          <ModelSelectorInput placeholder="Rechercher un modèle..." />
-          <ModelSelectorList>
-            <ModelSelectorEmpty>Aucun modèle trouvé</ModelSelectorEmpty>
-            <ModelSelectorGroup heading="Modèles Groq">
-              {availableModels.map((modelItem) => (
-                <ModelSelectorItem
-                  key={modelItem.value}
-                  value={modelItem.value}
-                  onSelect={() => {
-                    setModel(modelItem.value)
-                    setShowModelSelector(false)
-                  }}
-                >
-                  <ModelSelectorLogo provider="groq" />
-                  <ModelSelectorName>
-                    {modelItem.name}
-                    {modelItem.reasoningSupported && " ⚡"}
-                  </ModelSelectorName>
-                </ModelSelectorItem>
-              ))}
-            </ModelSelectorGroup>
-          </ModelSelectorList>
-        </ModelSelectorContent>
-      </ModelSelector>
     </div>
   )
 }
