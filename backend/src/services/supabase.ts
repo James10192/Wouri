@@ -124,13 +124,59 @@ export async function searchSimilarDocuments(
 }
 
 /**
+ * Fallback keyword search when embeddings are unavailable or unreliable
+ */
+export async function searchDocumentsByKeyword(
+  query: string,
+  match_count: number = 5,
+  filter?: { region?: string },
+): Promise<Array<{ content: string; similarity: number; metadata: any }>> {
+  const keywords = query
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 3)
+    .slice(0, 5);
+
+  const orFilter =
+    keywords.length > 0
+      ? keywords.map((word) => `content.ilike.%${word}%`).join(",")
+      : `content.ilike.%${query}%`;
+
+  let request = supabase
+    .from("documents")
+    .select("content, metadata")
+    .or(orFilter)
+    .limit(match_count);
+
+  if (filter?.region) {
+    request = request.contains("metadata", { region: filter.region });
+  }
+
+  const { data, error } = await request;
+
+  if (error) {
+    throw new Error(`Failed to search documents by keyword: ${error.message}`);
+  }
+
+  return (data || []).map((doc) => ({
+    content: doc.content,
+    metadata: doc.metadata,
+    similarity: 1,
+  }));
+}
+
+/**
  * Get embedding for text (using Supabase Edge Function or Groq)
  * For now, we'll use Groq's embedding model (free)
  */
 export async function getTextEmbedding(text: string): Promise<number[]> {
   // TODO: Implement Groq embedding or use Supabase Edge Function
-  // For now, return mock embedding (768 dimensions for sentence-transformers)
-  // In production, call Groq API or Supabase Edge Function
+  // In production, call the same embedding model used to index documents.
+  if (config.NODE_ENV !== "production") {
+    // Keep dev/test deterministic to match mock embeddings in docs.
+    return new Array(768).fill(0);
+  }
 
   // Mock embedding (replace with actual API call)
   return new Array(768).fill(0).map(() => Math.random());

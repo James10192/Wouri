@@ -128,6 +128,74 @@ const ChatBotDemo = () => {
   const isReasoningModel = (modelId?: string) =>
     availableModels.find((modelItem) => modelItem.value === modelId)
       ?.reasoningSupported || false
+  const renderToolInvocation = (toolData: any, key: string) => {
+    const hasResult = toolData.result || toolData.errorText
+    const toolName = String(toolData.toolName || "")
+    const normalizedName = toolName.toLowerCase()
+    const isVectorSearch =
+      Boolean(toolData.result?.embedding_preview) ||
+      Boolean(toolData.result?.results) ||
+      normalizedName.includes("vector") ||
+      normalizedName.includes("embedding")
+    const isKeywordSearch =
+      normalizedName.includes("keyword") || normalizedName.includes("mot-cle")
+    const vectorOutput = isVectorSearch && toolData.result ? (
+      <div className="space-y-2 text-sm">
+        <p className="font-medium">Documents trouves:</p>
+        <div className="space-y-3">
+          {toolData.result?.results?.map((doc: any, idx: number) => (
+            <div key={idx} className="border-l-2 border-primary/50 pl-3">
+              <p className="text-xs text-muted-foreground">
+                Similarite: {(doc.similarity * 100).toFixed(1)}%
+              </p>
+              <p>{doc.content}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Source: {doc.metadata?.source}, Page {doc.metadata?.page}
+              </p>
+            </div>
+          ))}
+          {!toolData.result?.results?.length && (
+            <p className="text-muted-foreground">Aucun document trouve.</p>
+          )}
+        </div>
+      </div>
+    ) : null
+    const title = isVectorSearch
+      ? "🔍 Recherche Vectorielle (pgvector)"
+      : isKeywordSearch
+        ? "🔍 Recherche par mots-cles"
+        : undefined
+
+    const shouldOpenByDefault =
+      toolData.state !== "output-available" &&
+      toolData.state !== "output-error" &&
+      toolData.state !== "output-denied"
+
+    return (
+      <Tool key={key} defaultOpen={shouldOpenByDefault}>
+        <ToolHeader
+          title={title}
+          type="tool-invocation"
+          state={toolData.state || "output-available"}
+        />
+        <ToolContent>
+          {toolData.args && <ToolInput input={toolData.args} />}
+          {!hasResult &&
+          (toolData.state === "input-streaming" ||
+            toolData.state === "input-available") ? (
+            <div className="px-4 pb-4 text-sm text-muted-foreground">
+              <Shimmer duration={1}>Chargement des resultats...</Shimmer>
+            </div>
+          ) : (
+            <ToolOutput
+              output={vectorOutput ?? toolData.result}
+              errorText={toolData.errorText}
+            />
+          )}
+        </ToolContent>
+      </Tool>
+    )
+  }
 
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text)
@@ -263,7 +331,10 @@ const ChatBotDemo = () => {
 
   // Calculate total tokens
   const totalTokensUsed = messages.reduce((sum, msg) => {
-    const usage = (msg as any).usage || { inputTokens: 0, outputTokens: 0 }
+    const usage = (msg as any)?.metadata?.usage || {
+      inputTokens: 0,
+      outputTokens: 0,
+    }
     return sum + usage.inputTokens + usage.outputTokens
   }, 0)
 
@@ -362,6 +433,13 @@ const ChatBotDemo = () => {
               {/* Messages */}
               {messages.map((message) => (
                 <div key={message.id}>
+                  {(message as any).metadata?.toolInvocations?.map(
+                    (toolData: any, toolIndex: number) =>
+                      renderToolInvocation(
+                        toolData,
+                        `${message.id}-tool-${toolIndex}`
+                      )
+                  )}
                   {message.role === "assistant" &&
                     message.parts.filter((part) => part.type === "source-url")
                       .length > 0 && (
@@ -444,79 +522,9 @@ const ChatBotDemo = () => {
                           </Reasoning>
                         )
                       case "tool-invocation":
-                        const toolData = part as any
-                        const hasResult =
-                          toolData.result || toolData.errorText
-                        const isVectorSearch =
-                          Boolean(toolData.result?.embedding_preview) ||
-                          Boolean(toolData.result?.results) ||
-                          String(toolData.toolName || "")
-                            .toLowerCase()
-                            .includes("vector") ||
-                          String(toolData.toolName || "")
-                            .toLowerCase()
-                            .includes("embedding")
-                        const vectorOutput = isVectorSearch && toolData.result ? (
-                          <div className="space-y-2 text-sm">
-                            <p className="font-medium">Documents trouves:</p>
-                            <div className="space-y-3">
-                              {toolData.result?.results?.map(
-                                (doc: any, idx: number) => (
-                                  <div
-                                    key={idx}
-                                    className="border-l-2 border-primary/50 pl-3"
-                                  >
-                                    <p className="text-xs text-muted-foreground">
-                                      Similarite:{" "}
-                                      {(doc.similarity * 100).toFixed(1)}%
-                                    </p>
-                                    <p>{doc.content}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      Source: {doc.metadata?.source}, Page{" "}
-                                      {doc.metadata?.page}
-                                    </p>
-                                  </div>
-                                )
-                              )}
-                              {!toolData.result?.results?.length && (
-                                <p className="text-muted-foreground">
-                                  Aucun document trouve.
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        ) : null
-                        return (
-                          <Tool key={`${message.id}-${i}`} defaultOpen>
-                            <ToolHeader
-                              title={
-                                isVectorSearch
-                                  ? "🔍 Recherche Vectorielle (pgvector)"
-                                  : undefined
-                              }
-                              type="tool-invocation"
-                              state={toolData.state || "output-available"}
-                            />
-                            <ToolContent>
-                              {toolData.args && (
-                                <ToolInput input={toolData.args} />
-                              )}
-                              {!hasResult &&
-                              (toolData.state === "input-streaming" ||
-                                toolData.state === "input-available") ? (
-                                <div className="px-4 pb-4 text-sm text-muted-foreground">
-                                  <Shimmer duration={1}>
-                                    Chargement des resultats...
-                                  </Shimmer>
-                                </div>
-                              ) : (
-                                <ToolOutput
-                                  output={vectorOutput ?? toolData.result}
-                                  errorText={toolData.errorText}
-                                />
-                              )}
-                            </ToolContent>
-                          </Tool>
+                        return renderToolInvocation(
+                          part as any,
+                          `${message.id}-${i}`
                         )
                       default:
                         return null
@@ -589,7 +597,7 @@ const ChatBotDemo = () => {
                 <Context
                   usedTokens={totalTokensUsed}
                   maxTokens={modelMaxTokens[model] || 8192}
-                  usage={(messages[messages.length - 1] as any)?.usage}
+                  usage={(messages[messages.length - 1] as any)?.metadata?.usage}
                   modelId={model}
                 >
                   <ContextTrigger />

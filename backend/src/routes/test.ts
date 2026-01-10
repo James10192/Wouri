@@ -64,6 +64,7 @@ test.post("/chat", async (c) => {
       reasoning: response.reasoning,
       sources: response.sources,
       metadata: response.metadata,
+      debug: response.debug,
       usage: {
         inputTokens: Math.floor((response.metadata?.tokens_used || 0) * 0.6),
         outputTokens: Math.floor((response.metadata?.tokens_used || 0) * 0.4),

@@ -63,9 +63,19 @@ export async function POST(req: Request) {
       outputTokens: number
       reasoningTokens?: number
     }
+    debug?: {
+      toolInvocations?: Array<{
+        toolName: string
+        args?: Record<string, unknown>
+        result?: Record<string, unknown>
+        errorText?: string
+        state?: string
+      }>
+    }
   }
   const answer = data.answer || "Aucune reponse renvoyee par le backend."
   const reasoning = data.reasoning || ""
+  const toolInvocations = data.debug?.toolInvocations || []
 
   const stream = createUIMessageStream({
     originalMessages: body.messages,
@@ -88,10 +98,15 @@ export async function POST(req: Request) {
       writer.write({ type: "text-delta", id: "text-1", delta: answer })
       writer.write({ type: "text-end", id: "text-1" })
 
-      if (data.usage) {
+      if (data.usage || toolInvocations.length > 0) {
         writer.write({
           type: "message-metadata",
-          messageMetadata: { usage: data.usage },
+          messageMetadata: {
+            ...(data.usage ? { usage: data.usage } : {}),
+            ...(toolInvocations.length > 0
+              ? { toolInvocations }
+              : {}),
+          },
         })
       }
 

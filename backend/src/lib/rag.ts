@@ -1,5 +1,9 @@
 import { generateRAGResponse } from "@/services/groq";
-import { searchSimilarDocuments, getTextEmbedding } from "@/services/supabase";
+import {
+  searchSimilarDocuments,
+  searchDocumentsByKeyword,
+  getTextEmbedding,
+} from "@/services/supabase";
 import { getWeatherContext, getWeatherAdvice } from "@/services/weather";
 import type { RAGResponse } from "@/types";
 import { config } from "@/lib/config";
@@ -18,6 +22,17 @@ export async function ragPipeline(
   console.log(`[RAG] Processing question for region: ${userRegion}, language: ${language}`);
 
   try {
+    const regionFilter = shouldFilterRegion(userRegion)
+      ? { region: userRegion }
+      : undefined;
+    const toolInvocations: Array<{
+      toolName: string;
+      args?: Record<string, unknown>;
+      result?: Record<string, unknown>;
+      errorText?: string;
+      state?: string;
+    }> = [];
+
     // Step 1: Generate embedding for the question
     const embedding = await getTextEmbedding(question);
 
@@ -26,7 +41,7 @@ export async function ragPipeline(
       embedding,
       0.7, // Similarity threshold (70%)
       5, // Top 5 most relevant documents
-      { region: userRegion }, // Filter by user's region
+      regionFilter, // Filter by user's region when specific
     );
 
     // Log vector search for Tool visualization (dev only)
@@ -44,27 +59,80 @@ export async function ragPipeline(
         timestamp: new Date().toISOString(),
       });
     }
+    toolInvocations.push({
+      toolName: "vector_search",
+      state: "output-available",
+      args: {
+        query: question,
+        match_threshold: 0.7,
+        match_count: 5,
+        filter: regionFilter || {},
+      },
+      result: {
+        embedding_preview: embedding.slice(0, 5).concat(["...", `(${embedding.length} total)`]),
+        results: similarDocs.map(d => ({
+          id: (d as any).id || "unknown",
+          similarity: d.similarity,
+          content: d.content.slice(0, 150) + "...",
+          metadata: d.metadata,
+        })),
+      },
+    });
+
+    let relevantDocs = similarDocs;
+    const topSimilarity = relevantDocs[0]?.similarity ?? 0;
+    const invalidSimilarity = Number.isNaN(topSimilarity);
 
     // Step 3: Check if we found relevant documents
-    if (similarDocs.length === 0 || similarDocs[0].similarity < 0.7) {
-      // Small-talk detected: generate response with Groq (no RAG context)
-      console.log("[RAG] ⚡ Small-talk detected, using Groq without RAG context");
-      const smallTalkResponse = await generateRAGResponse(
+    if (relevantDocs.length === 0 || invalidSimilarity || topSimilarity < 0.7) {
+      const keywordDocs = await searchDocumentsByKeyword(
         question,
+        5,
+        regionFilter,
+      );
+      if (keywordDocs.length > 0) {
+        console.log("[RAG] ⚡ Vector search empty, using keyword fallback");
+        relevantDocs = keywordDocs;
+        toolInvocations.push({
+          toolName: "keyword_search",
+          state: "output-available",
+          args: {
+            query: question,
+            match_count: 5,
+            filter: regionFilter || {},
+          },
+          result: {
+            results: keywordDocs.map(d => ({
+              id: (d as any).id || "unknown",
+              similarity: d.similarity,
+              content: d.content.slice(0, 150) + "...",
+              metadata: d.metadata,
+            })),
+          },
+        });
+      } else {
+        // Small-talk detected: generate response with Groq (no RAG context)
+        console.log("[RAG] ⚡ Small-talk detected, using Groq without RAG context");
+        const smallTalkResponse = await generateRAGResponse(
+          question,
         "", // No context for small-talk
         userRegion,
         language,
         model,
         reasoningEnabled,
-      );
-      return {
-        ...smallTalkResponse,
-        sources: [],
-      };
+        );
+        return {
+          ...smallTalkResponse,
+          sources: [],
+          debug: {
+            toolInvocations,
+          },
+        };
+      }
     }
 
     // Step 4: Build context from retrieved documents
-    let context = buildContext(similarDocs);
+    let context = buildContext(relevantDocs);
 
     // Step 4.5: Add weather data (if available)
     const weatherContext = await getWeatherContext(userRegion);
@@ -91,7 +159,12 @@ export async function ragPipeline(
 
     console.log(`[RAG] ✅ Response generated in ${response.metadata.response_time_ms}ms`);
 
-    return response;
+    return {
+      ...response,
+      debug: {
+        toolInvocations,
+      },
+    };
   } catch (error) {
     console.error("[RAG] Pipeline error:", error);
     throw new Error(`RAG pipeline failed: ${error}`);
@@ -119,6 +192,27 @@ ${doc.content}
 `;
     })
     .join("\n");
+}
+
+function shouldFilterRegion(region: string): boolean {
+  if (!region) {
+    return false;
+  }
+  const normalized = region
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['’]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const genericRegions = new Set([
+    "cote d ivoire",
+    "cote divoire",
+    "ivory coast",
+  ]);
+
+  return !genericRegions.has(normalized);
 }
 
 /**

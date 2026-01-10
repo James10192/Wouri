@@ -103,6 +103,15 @@ export interface RAGResponse {
       reasoningTokens?: number;
     };
   };
+  debug?: {
+    toolInvocations?: Array<{
+      toolName: string;
+      args?: Record<string, unknown>;
+      result?: Record<string, unknown>;
+      errorText?: string;
+      state?: string;
+    }>;
+  };
 }
 
 // ============================================================================
