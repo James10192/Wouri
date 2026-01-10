@@ -58,6 +58,8 @@ import { BrainIcon, CopyIcon, RefreshCcwIcon } from "lucide-react"
 import { toast } from "sonner"
 import { Sidebar } from "@/components/sidebar/sidebar"
 import { useConversationStore } from "@/lib/conversation-store"
+import { parseTextWithCitations } from "@/lib/citation-parser"
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool"
 
 const fallbackModels = [
   {
@@ -355,7 +357,9 @@ const ChatBotDemo = () => {
                         return (
                           <Message key={`${message.id}-${i}`} from={message.role}>
                             <MessageContent>
-                              <MessageResponse>{part.text}</MessageResponse>
+                              <MessageResponse>
+                                {parseTextWithCitations(part.text)}
+                              </MessageResponse>
                               {message.role === "assistant" && (
                                 <div className="mt-2 text-xs text-muted-foreground">
                                   Modele:{" "}
@@ -398,6 +402,39 @@ const ChatBotDemo = () => {
                             <ReasoningTrigger />
                             <ReasoningContent>{part.text}</ReasoningContent>
                           </Reasoning>
+                        )
+                      case "tool-invocation":
+                        const toolData = part as any
+                        return (
+                          <Tool key={`${message.id}-${i}`} defaultOpen>
+                            <ToolHeader
+                              title="🔍 Recherche Vectorielle (pgvector)"
+                              type="tool-invocation"
+                              state={toolData.state || "complete"}
+                            />
+                            <ToolContent>
+                              <ToolInput>
+                                <div className="space-y-1 text-sm">
+                                  <p><strong>Question:</strong> {toolData.result?.query || "N/A"}</p>
+                                  <p><strong>Embedding:</strong> <code className="text-xs">{JSON.stringify(toolData.result?.embedding_preview)}</code></p>
+                                </div>
+                              </ToolInput>
+                              <ToolOutput>
+                                <div className="space-y-2">
+                                  <p className="font-medium">Documents trouvés:</p>
+                                  {toolData.result?.results?.map((doc: any, idx: number) => (
+                                    <div key={idx} className="border-l-2 border-primary/50 pl-3">
+                                      <p className="text-xs text-muted-foreground">Similarité: {(doc.similarity * 100).toFixed(1)}%</p>
+                                      <p className="text-sm">{doc.content}</p>
+                                      <p className="text-xs text-muted-foreground mt-1">
+                                        Source: {doc.metadata?.source}, Page {doc.metadata?.page}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </ToolOutput>
+                            </ToolContent>
+                          </Tool>
                         )
                       default:
                         return null

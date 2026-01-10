@@ -2,6 +2,7 @@ import { generateRAGResponse } from "@/services/groq";
 import { searchSimilarDocuments, getTextEmbedding } from "@/services/supabase";
 import { getWeatherContext, getWeatherAdvice } from "@/services/weather";
 import type { RAGResponse } from "@/types";
+import { config } from "@/lib/config";
 
 /**
  * Main RAG Pipeline
@@ -27,6 +28,22 @@ export async function ragPipeline(
       5, // Top 5 most relevant documents
       { region: userRegion }, // Filter by user's region
     );
+
+    // Log vector search for Tool visualization (dev only)
+    if (config.NODE_ENV === "development") {
+      const { setLastVectorSearch } = await import("@/routes/debug");
+      setLastVectorSearch({
+        query: question,
+        embedding_preview: embedding.slice(0, 5).concat(["...", `(${embedding.length} total)`]),
+        results: similarDocs.map(d => ({
+          id: (d as any).id || "unknown",
+          similarity: d.similarity,
+          content: d.content.slice(0, 150) + "...",
+          metadata: d.metadata,
+        })),
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     // Step 3: Check if we found relevant documents
     if (similarDocs.length === 0 || similarDocs[0].similarity < 0.7) {
