@@ -60,6 +60,19 @@ import { Sidebar } from "@/components/sidebar/sidebar"
 import { useConversationStore } from "@/lib/conversation-store"
 import { parseTextWithCitations } from "@/lib/citation-parser"
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from "@/components/ai-elements/tool"
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorInput,
+  ModelSelectorList,
+  ModelSelectorEmpty,
+  ModelSelectorGroup,
+  ModelSelectorItem,
+  ModelSelectorLogo,
+  ModelSelectorName,
+} from "@/components/ai-elements/model-selector"
+import { Button } from "@/components/ui/button"
+import { ChevronDownIcon } from "lucide-react"
 
 const fallbackModels = [
   {
@@ -92,6 +105,7 @@ const ChatBotDemo = () => {
     Record<string, string>
   >({})
   const [reasoningEnabled, setReasoningEnabled] = useState(false)
+  const [showModelSelector, setShowModelSelector] = useState(false)
   const {
     messages,
     sendMessage,
@@ -295,12 +309,24 @@ const ChatBotDemo = () => {
         <Sidebar
           onNewConversation={handleNewConversation}
           currentModel={selectedModelLabel}
-          availableModels={availableModels}
-          model={model}
-          setModel={setModel}
         />
 
         <main className="flex h-full min-w-0 flex-1 flex-col p-4">
+          {/* Model Selector Button - Top Left */}
+          <div className="mb-4">
+            <Button
+              variant="outline"
+              className="justify-between min-w-[200px]"
+              onClick={() => setShowModelSelector(true)}
+            >
+              <div className="flex items-center gap-2">
+                <ModelSelectorLogo provider="groq" size={16} />
+                <span className="text-sm">{selectedModelLabel}</span>
+              </div>
+              <ChevronDownIcon className="size-4 opacity-50" />
+            </Button>
+          </div>
+
           <Conversation className="h-full w-full">
             <ConversationContent>
               {/* Initial suggestions */}
@@ -528,6 +554,34 @@ const ChatBotDemo = () => {
               <PromptInputSubmit disabled={!input && !status} status={status} />
             </PromptInputFooter>
           </PromptInput>
+
+          {/* Model Selector Dialog */}
+          <ModelSelector open={showModelSelector} onOpenChange={setShowModelSelector}>
+            <ModelSelectorContent title="Sélectionner un modèle">
+              <ModelSelectorInput placeholder="Rechercher un modèle..." />
+              <ModelSelectorList>
+                <ModelSelectorEmpty>Aucun modèle trouvé</ModelSelectorEmpty>
+                <ModelSelectorGroup heading="Modèles Groq">
+                  {availableModels.map((modelItem) => (
+                    <ModelSelectorItem
+                      key={modelItem.value}
+                      value={modelItem.value}
+                      onSelect={() => {
+                        setModel(modelItem.value)
+                        setShowModelSelector(false)
+                      }}
+                    >
+                      <ModelSelectorLogo provider="groq" />
+                      <ModelSelectorName>
+                        {modelItem.name}
+                        {modelItem.reasoningSupported && " ⚡"}
+                      </ModelSelectorName>
+                    </ModelSelectorItem>
+                  ))}
+                </ModelSelectorGroup>
+              </ModelSelectorList>
+            </ModelSelectorContent>
+          </ModelSelector>
         </main>
       </div>
     </div>
