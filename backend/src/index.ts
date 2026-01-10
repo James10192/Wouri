@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { config } from "@/lib/config";
 import webhooks from "@/routes/webhooks";
 import test from "@/routes/test";
+import models from "@/routes/models";
 
 /**
  * Wouri Bot Backend
@@ -53,6 +54,9 @@ app.get("/health", (c) => {
 
 // Webhooks (WhatsApp + FedaPay)
 app.route("/webhooks", webhooks);
+
+// Models endpoint
+app.route("/models", models);
 
 // Test routes (Development only)
 if (config.NODE_ENV === "development") {

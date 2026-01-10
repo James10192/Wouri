@@ -156,6 +156,14 @@ function extractSources(context: string): Array<{ source: string; page?: number;
 }
 
 /**
+ * Check if a model supports reasoning
+ */
+export function isReasoningModel(modelId: string): boolean {
+  const reasoningModels = ["qwen/qwen3-32b", "qwen-32b", "deepseek-r1"];
+  return reasoningModels.some((model) => modelId.toLowerCase().includes(model));
+}
+
+/**
  * Generate text embedding using Groq (if available)
  * Note: Groq doesn't have embedding models yet, use sentence-transformers via Supabase Edge Function
  */
