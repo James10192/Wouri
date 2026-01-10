@@ -4,7 +4,7 @@ import {
   searchDocumentsByKeyword,
   getTextEmbedding,
 } from "@/services/supabase";
-import { getWeatherContext, getWeatherAdvice } from "@/services/weather";
+import { getWeatherData } from "@/services/weather";
 import type { RAGResponse } from "@/types";
 import { config } from "@/lib/config";
 
@@ -143,11 +143,27 @@ export async function ragPipeline(
     let context = buildContext(relevantDocs);
 
     // Step 4.5: Add weather data (if available)
-    const weatherContext = await getWeatherContext(userRegion);
-    const weatherAdvice = await getWeatherAdvice(userRegion);
-
-    if (weatherContext) {
-      context += `\n\n[DONNÉES MÉTÉO ACTUELLES]\n${weatherContext}\n`;
+    console.log(`[RAG] 🌦️ Fetching weather for region: ${userRegion}`);
+    const weather = await getWeatherData(userRegion);
+    if (weather) {
+      toolInvocations.push({
+        toolName: "weather_lookup",
+        state: "output-available",
+        args: {
+          region: userRegion,
+          units: "metric",
+        },
+        result: {
+          region: weather.region,
+          temperature: weather.temperature,
+          feels_like: weather.feels_like,
+          humidity: weather.humidity,
+          description: weather.description,
+          wind_speed: weather.wind_speed,
+          rain_mm: weather.rain_mm ?? 0,
+        },
+      });
+      context += `\n\n[DONNÉES MÉTÉO ACTUELLES]\n${formatWeatherContext(weather)}\n`;
     }
 
     // Step 5: Generate answer using Groq (FREE & FAST!)
@@ -162,6 +178,7 @@ export async function ragPipeline(
     );
 
     // Step 6: Add weather advice if relevant
+    const weatherAdvice = weather ? buildWeatherAdvice(weather) : "";
     if (weatherAdvice && response.answer) {
       response.answer += weatherAdvice;
     }
@@ -201,6 +218,50 @@ ${doc.content}
 `;
     })
     .join("\n");
+}
+
+function formatWeatherContext(weather: {
+  temperature: number;
+  feels_like: number;
+  humidity: number;
+  description: string;
+  wind_speed: number;
+  rain_mm?: number;
+  region: string;
+}): string {
+  return `Météo actuelle à ${weather.region}:
+- Température: ${weather.temperature}°C (ressenti ${weather.feels_like}°C)
+- Humidité: ${weather.humidity}%
+- Conditions: ${weather.description}
+- Vent: ${weather.wind_speed} m/s
+${weather.rain_mm ? `- Pluie: ${weather.rain_mm}mm` : ""}`;
+}
+
+function buildWeatherAdvice(weather: {
+  temperature: number;
+  humidity: number;
+  wind_speed: number;
+  rain_mm?: number;
+}): string {
+  const advice: string[] = [];
+
+  if (weather.temperature > 35) {
+    advice.push("⚠️ Chaleur excessive: Irriguer vos cultures le matin ou le soir.");
+  } else if (weather.temperature < 15) {
+    advice.push("⚠️ Température basse: Protéger les jeunes plants.");
+  }
+
+  if (weather.rain_mm && weather.rain_mm > 10) {
+    advice.push("🌧️ Fortes pluies: Éviter de travailler le sol. Vérifier le drainage.");
+  } else if (weather.humidity < 40) {
+    advice.push("☀️ Faible humidité: Prévoir l'irrigation.");
+  }
+
+  if (weather.wind_speed > 10) {
+    advice.push("💨 Vent fort: Éviter les traitements phytosanitaires.");
+  }
+
+  return advice.length > 0 ? `\n\nConseils météo:\n${advice.join("\n")}` : "";
 }
 
 function buildConversationContext(

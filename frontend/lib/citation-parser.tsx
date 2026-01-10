@@ -24,7 +24,6 @@ export function parseTextWithCitations(text: string): React.ReactNode[] {
     parts.push(
       <InlineCitation
         key={`cite-${citationIndex}`}
-        href={`#source-${sourceName.replace(/\s/g, "-")}`}
         title={`${sourceName}, page ${pageNum}`}
       >
         [{citationIndex}]

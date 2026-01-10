@@ -285,7 +285,7 @@ const ChatBotDemo = () => {
               name: modelItem.id,
               value: modelItem.id,
               reasoningSupported: Boolean(modelItem.reasoning_supported),
-              contextWindow: modelItem.context_window,
+              contextWindow: modelItem.context_window ?? 8192,
             })) || []
         if (modelsFromApi.length > 0) {
           setAvailableModels(modelsFromApi)
@@ -400,7 +400,7 @@ const ChatBotDemo = () => {
               onClick={() => setShowModelSelector(true)}
             >
               <div className="flex items-center gap-2">
-                <ModelSelectorLogo provider="groq" size={16} />
+                <ModelSelectorLogo provider="groq" />
                 <span className="text-sm">{selectedModelLabel}</span>
               </div>
               <ChevronDownIcon className="size-4 opacity-50" />
@@ -542,9 +542,9 @@ const ChatBotDemo = () => {
               {/* Loading shimmer */}
               {status === "submitted" && (
                 <div className="space-y-2 px-4 py-2">
-                  <Shimmer className="h-4 w-3/4" />
-                  <Shimmer className="h-4 w-1/2" delay={100} />
-                  <Shimmer className="h-4 w-2/3" delay={200} />
+                  <Shimmer className="text-sm">Chargement...</Shimmer>
+                  <Shimmer className="text-sm">Analyse...</Shimmer>
+                  <Shimmer className="text-sm">Preparation de la reponse...</Shimmer>
                 </div>
               )}
 
