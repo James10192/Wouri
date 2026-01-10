@@ -1,0 +1,548 @@
+# Knowledge Base Schema
+
+Data structure for RAG (Retrieval Augmented Generation) vector database.
+
+---
+
+## Base Document Object
+
+```typescript
+interface Document {
+  id: string;                    // UUID - Unique document identifier
+  content: string;               // Document text content (10-5000 chars)
+  embedding: string | null;      // 768-dimensional vector (stored as string)
+  metadata: DocumentMetadata;    // Document metadata (JSONB)
+  created_at: string;            // ISO 8601 timestamp
+}
+```
+
+## Document Metadata
+
+```typescript
+interface DocumentMetadata {
+  source: string;                // Document source (required)
+  page?: number;                 // Page number
+  region?: string;               // Geographic region (e.g., "Bouaké", "Abidjan")
+  category?: DocumentCategory;   // Content category
+  crop?: string;                 // Crop name (maïs, cacao, manioc, etc.)
+  language?: Language;           // Content language (fr, dioula, baoulé, en)
+  verified?: boolean;            // True if verified by agricultural expert
+  author?: string;               // Original author
+  publication_date?: string;     // Original publication date (ISO 8601)
+  [key: string]: any;            // Additional custom fields
+}
+
+type DocumentCategory =
+  | "plantation"     // Planting techniques
+  | "harvest"        // Harvesting methods
+  | "disease"        // Plant diseases and pests
+  | "weather"        // Weather and climate
+  | "general";       // General agricultural information
+
+type Language = "fr" | "dioula" | "baoulé" | "en";
+```
+
+## TypeScript Types
+
+```typescript
+// Zod schema for validation
+import { z } from "zod";
+
+export const documentMetadataSchema = z.object({
+  source: z.string().min(1),
+  page: z.number().int().optional(),
+  region: z.string().optional(),
+  category: z.enum(["plantation", "harvest", "disease", "weather", "general"]).optional(),
+  crop: z.string().optional(),
+  language: z.enum(["fr", "dioula", "baoulé", "en"]).optional(),
+  verified: z.boolean().optional(),
+  author: z.string().optional(),
+  publication_date: z.string().datetime().optional(),
+}).passthrough(); // Allow additional custom fields
+
+export const documentSchema = z.object({
+  id: z.string().uuid(),
+  content: z.string().min(10).max(5000),
+  embedding: z.string().nullable(),
+  metadata: documentMetadataSchema,
+  created_at: z.string().datetime(),
+});
+
+export type Document = z.infer<typeof documentSchema>;
+
+// Create document request
+export const knowledgeCreateSchema = z.object({
+  content: z.string().min(10).max(5000),
+  metadata: documentMetadataSchema,
+});
+
+export type KnowledgeCreate = z.infer<typeof knowledgeCreateSchema>;
+```
+
+---
+
+## Example Document Object
+
+```json
+{
+  "id": "990e8400-e29b-41d4-a716-446655440000",
+  "content": "Le manioc nécessite un sol bien drainé et une température entre 25-29°C. La plantation se fait avec des boutures de 20-25cm prélevées sur des plants sains. Espacement recommandé: 1m entre rangs et 1m entre plants. Récolte après 10-12 mois lorsque les feuilles jaunissent. Rendement moyen: 10-15 tonnes/hectare.",
+  "embedding": "[0.123, 0.456, 0.789, ... 768 dimensions]",
+  "metadata": {
+    "source": "Ministère de l'Agriculture - Guide Manioc 2025",
+    "page": 15,
+    "region": "Bouaké",
+    "category": "plantation",
+    "crop": "manioc",
+    "language": "fr",
+    "verified": true,
+    "author": "Dr. Kouassi Jean",
+    "publication_date": "2025-01-15T00:00:00Z"
+  },
+  "created_at": "2026-01-10T14:00:00Z"
+}
+```
+
+---
+
+## Search Result Object
+
+Result from vector similarity search (GET /admin/knowledge).
+
+```typescript
+interface SearchResult {
+  id: string;                    // Document UUID
+  content: string;               // Document text
+  similarity: number;            // Cosine similarity score (0-1)
+  metadata: DocumentMetadata;    // Document metadata
+}
+
+interface SearchResponse {
+  results: SearchResult[];
+}
+```
+
+**Example**:
+```json
+{
+  "results": [
+    {
+      "id": "990e8400-e29b-41d4-a716-446655440000",
+      "content": "Le manioc nécessite un sol bien drainé et une température entre 25-29°C...",
+      "similarity": 0.92,
+      "metadata": {
+        "source": "Ministère de l'Agriculture - Guide Manioc 2025",
+        "page": 15,
+        "region": "Bouaké",
+        "category": "plantation",
+        "crop": "manioc"
+      }
+    },
+    {
+      "id": "aa0e8400-e29b-41d4-a716-446655440000",
+      "content": "Culture du manioc: choisir un terrain plat ou légèrement incliné...",
+      "similarity": 0.87,
+      "metadata": {
+        "source": "Guide Pratique Agriculture CI 2024",
+        "page": 42,
+        "region": "Bouaké",
+        "category": "plantation",
+        "crop": "manioc"
+      }
+    }
+  ]
+}
+```
+
+---
+
+## Field Descriptions
+
+| Field | Type | Nullable | Description |
+|-------|------|----------|-------------|
+| `id` | UUID | No | Unique document identifier generated by database |
+| `content` | string | No | Document text (10-5000 characters) |
+| `embedding` | string | Yes | 768-dimensional vector as string (pgvector VECTOR type) |
+| `metadata` | JSONB | No | Document metadata (flexible schema) |
+| `created_at` | datetime | No | Timestamp when document was added (ISO 8601) |
+
+### Metadata Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `source` | string | Yes | Document source (ministry guide, research paper, etc.) |
+| `page` | integer | No | Page number in source document |
+| `region` | string | No | Geographic region (Bouaké, Abidjan, Daloa, etc.) |
+| `category` | enum | No | Content category (plantation, harvest, disease, weather, general) |
+| `crop` | string | No | Crop name (maïs, cacao, manioc, riz, etc.) |
+| `language` | enum | No | Content language (fr, dioula, baoulé, en) |
+| `verified` | boolean | No | True if verified by agricultural expert |
+| `author` | string | No | Original author name |
+| `publication_date` | datetime | No | Original publication date (ISO 8601) |
+
+**Note**: Metadata is stored as JSONB in PostgreSQL, allowing flexible custom fields.
+
+---
+
+## Embedding Details
+
+### Vector Model
+- **Model**: all-MiniLM-L6-v2 (sentence-transformers)
+- **Dimension**: 768
+- **Type**: Dense vector (not sparse)
+- **Distance Metric**: Cosine similarity
+- **Index**: HNSW (Hierarchical Navigable Small World)
+
+### Embedding Process
+
+1. **Text Input**: Document content (10-5000 chars)
+2. **Preprocessing**: Trim whitespace, normalize Unicode
+3. **Embedding**: Supabase Edge Function → ONNX Runtime → 768-dim vector
+4. **Storage**: pgvector VECTOR(768) type
+5. **Indexing**: HNSW index for fast similarity search
+
+**Latency**: ~50ms per embedding
+
+### Embedding Format
+
+PostgreSQL stores embeddings as VECTOR type:
+```sql
+embedding VECTOR(768)
+```
+
+In API responses, embeddings are returned as strings:
+```json
+"embedding": "[0.123, 0.456, 0.789, ..., 0.321]"
+```
+
+To parse:
+```typescript
+const embeddingArray: number[] = JSON.parse(embeddingString);
+```
+
+---
+
+## Similarity Scores
+
+Cosine similarity ranges from -1 to 1, but practical scores for RAG:
+
+| Score | Interpretation | Action |
+|-------|----------------|--------|
+| > 0.9 | Excellent match | Use as primary context |
+| 0.8 - 0.9 | Good match | Use as supporting context |
+| 0.7 - 0.8 | Relevant | Use if no better matches |
+| < 0.7 | Not relevant | Discard |
+
+**Default Threshold**: 0.7 (configurable via `match_documents` RPC function)
+
+---
+
+## Database Schema
+
+```sql
+CREATE TABLE documents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content TEXT NOT NULL CHECK (char_length(content) >= 10 AND char_length(content) <= 5000),
+  embedding VECTOR(768), -- pgvector extension
+  metadata JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW() NOT NULL
+);
+
+-- HNSW index for fast vector search
+CREATE INDEX documents_embedding_idx ON documents USING hnsw (embedding vector_cosine_ops);
+
+-- GIN index for metadata queries
+CREATE INDEX documents_metadata_idx ON documents USING gin (metadata jsonb_path_ops);
+
+-- Search function
+CREATE OR REPLACE FUNCTION match_documents(
+  query_embedding VECTOR(768),
+  match_threshold FLOAT DEFAULT 0.7,
+  match_count INT DEFAULT 10,
+  filter JSONB DEFAULT '{}'::JSONB
+)
+RETURNS TABLE (
+  id UUID,
+  content TEXT,
+  similarity FLOAT,
+  metadata JSONB
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    d.id,
+    d.content,
+    1 - (d.embedding <=> query_embedding) AS similarity,
+    d.metadata
+  FROM documents d
+  WHERE
+    1 - (d.embedding <=> query_embedding) > match_threshold
+    AND (filter = '{}'::JSONB OR d.metadata @> filter)
+  ORDER BY similarity DESC
+  LIMIT match_count;
+END;
+$$;
+```
+
+---
+
+## Content Guidelines
+
+### Content Length
+
+| Length | Recommendation | Use Case |
+|--------|----------------|----------|
+| 10-50 chars | Too short | Avoid - not enough context |
+| 50-200 chars | Short snippet | Quick facts, definitions |
+| 200-500 chars | Ideal | Specific techniques, tips |
+| 500-2000 chars | Comprehensive | Detailed guides, procedures |
+| 2000-5000 chars | Maximum | Complete topic coverage |
+
+### Content Quality
+
+✅ **Good Example**:
+```
+Le manioc nécessite un sol bien drainé et une température entre 25-29°C.
+La plantation se fait avec des boutures de 20-25cm prélevées sur des plants sains.
+Espacement recommandé: 1m entre rangs et 1m entre plants.
+Récolte après 10-12 mois lorsque les feuilles jaunissent.
+Rendement moyen: 10-15 tonnes/hectare.
+Variétés adaptées à la Côte d'Ivoire: TMS 30572, TMS 91934.
+```
+
+❌ **Poor Example**:
+```
+Le manioc
+```
+
+### Metadata Best Practices
+
+- ✅ Always include `source` (mandatory)
+- ✅ Add `region` for location-specific advice
+- ✅ Specify `crop` for crop-specific documents
+- ✅ Use `category` to organize content
+- ✅ Set `verified: true` for expert-reviewed content
+- ❌ Don't leave metadata empty or minimal
+
+---
+
+## Categories Explained
+
+### plantation
+- Planting techniques
+- Soil preparation
+- Seed selection
+- Spacing recommendations
+- Best planting periods
+
+### harvest
+- Harvesting methods
+- Maturity indicators
+- Post-harvest handling
+- Storage techniques
+- Yield optimization
+
+### disease
+- Plant diseases
+- Pest identification
+- Treatment methods
+- Prevention strategies
+- Symptom recognition
+
+### weather
+- Seasonal patterns
+- Climate requirements
+- Rainfall needs
+- Temperature ranges
+- Weather-related risks
+
+### general
+- Agricultural terminology
+- General farming practices
+- Equipment usage
+- Market information
+- Other topics
+
+---
+
+## Vector Search Process
+
+### Query Flow
+
+1. **User Query**: "Quand planter le maïs à Bouaké?"
+2. **Embed Query**: Generate 768-dim vector for query text
+3. **Vector Search**: Find top-k similar documents using HNSW index
+4. **Filter** (optional): Apply metadata filters (region, category, crop)
+5. **Rank**: Sort by cosine similarity (descending)
+6. **Return**: Top-k results with similarity scores
+
+### Search Parameters
+
+```typescript
+interface SearchParams {
+  query: string;           // Required: Search query
+  region?: string;         // Optional: Filter by region
+  limit?: number;          // Optional: Number of results (default: 10, max: 50)
+  threshold?: number;      // Optional: Similarity threshold (default: 0.7)
+}
+```
+
+### Example Search
+
+```typescript
+// Search for maize planting information in Bouaké
+const results = await adminFetch('/admin/knowledge?query=plantation maïs&region=Bouaké&limit=5');
+
+results.results.forEach(doc => {
+  console.log(`Similarity: ${doc.similarity.toFixed(2)}`);
+  console.log(`Content: ${doc.content.substring(0, 100)}...`);
+  console.log(`Source: ${doc.metadata.source}`);
+});
+```
+
+---
+
+## Validation Rules
+
+### content
+- ✅ Required, non-empty string
+- ✅ Minimum 10 characters
+- ✅ Maximum 5000 characters
+- ❌ Returns 400 if outside range
+
+### metadata.source
+- ✅ Required, non-empty string
+- ✅ Should be descriptive (e.g., "Ministère de l'Agriculture - Guide Maïs 2025")
+- ❌ Returns 400 if missing
+
+### metadata.category
+- ✅ Optional
+- ✅ Must be one of: plantation, harvest, disease, weather, general
+- ❌ Returns 400 if invalid value
+
+### metadata.language
+- ✅ Optional
+- ✅ Must be one of: fr, dioula, baoulé, en
+- ❌ Returns 400 if invalid value
+
+---
+
+## Query Examples
+
+### Add document with minimal metadata
+```typescript
+const document = await adminFetch('/admin/knowledge', {
+  method: 'POST',
+  body: JSON.stringify({
+    content: "Le maïs se plante entre avril et juin pendant la saison des pluies...",
+    metadata: {
+      source: "Guide Maïs 2025"
+    }
+  })
+});
+```
+
+### Add document with full metadata
+```typescript
+const document = await adminFetch('/admin/knowledge', {
+  method: 'POST',
+  body: JSON.stringify({
+    content: "Le manioc nécessite un sol bien drainé...",
+    metadata: {
+      source: "Ministère de l'Agriculture - Guide Manioc 2025",
+      page: 15,
+      region: "Bouaké",
+      category: "plantation",
+      crop: "manioc",
+      language: "fr",
+      verified: true,
+      author: "Dr. Kouassi Jean",
+      publication_date: "2025-01-15T00:00:00Z"
+    }
+  })
+});
+```
+
+### Search with region filter
+```typescript
+const results = await adminFetch('/admin/knowledge?query=maïs plantation&region=Bouaké&limit=10');
+```
+
+### Search all documents (no filters)
+```typescript
+const results = await adminFetch('/admin/knowledge?query=agriculture&limit=50');
+```
+
+---
+
+## Performance
+
+### Indexing
+- **Embedding generation**: ~50ms
+- **Insert latency**: ~30ms
+- **Total POST latency**: ~100ms
+
+### Search
+- **Query embedding**: ~50ms
+- **Vector search (HNSW)**: ~10-50ms (depending on database size)
+- **Total GET latency**: ~100-150ms
+
+### Optimization Tips
+- ✅ Use HNSW index (already configured)
+- ✅ Keep content under 2000 chars for faster embedding
+- ✅ Use metadata filters to reduce search space
+- ✅ Batch document imports (10-20 at a time)
+
+---
+
+## Related Schemas
+
+- [Feedback Schema](./feedback.md) - Admin feedback also embedded in vector DB
+- [Conversation Schema](./conversation.md) - RAG pipeline uses knowledge base for responses
+- [Translation Schema](./translation.md) - Multilingual translation database
+
+---
+
+## Error Handling
+
+### 400 Bad Request
+```json
+{
+  "error": "Validation failed",
+  "message": "content must be between 10 and 5000 characters"
+}
+```
+
+### 500 Internal Server Error
+```json
+{
+  "error": "Embedding generation failed",
+  "message": "Supabase Edge Function timeout"
+}
+```
+
+---
+
+## Best Practices
+
+### Document Creation
+- ✅ One topic per document (don't mix maize and cassava)
+- ✅ Include specific measurements and numbers
+- ✅ Add region information for location-specific advice
+- ✅ Set verified: true for expert-reviewed content
+- ❌ Don't add overly generic content
+- ❌ Don't duplicate existing documents
+
+### Source Attribution
+- ✅ Cite official sources (Ministère de l'Agriculture CI)
+- ✅ Include publication year in source name
+- ✅ Add page numbers for reference
+- ✅ Credit original authors
+
+### Content Organization
+- ✅ Use categories consistently
+- ✅ Tag with crop names
+- ✅ Specify regions for regional advice
+- ✅ Add language tag for multilingual content
