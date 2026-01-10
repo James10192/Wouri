@@ -150,3 +150,12 @@ smartlink/
 
 # Documentation temporaire
 docs/text
+
+# Data files (collecte de données)
+data/
+interviews/
+*.mp3
+*.wav
+*.m4a
+*.pdf
+*.docx
