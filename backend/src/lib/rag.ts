@@ -47,14 +47,19 @@ export async function ragPipeline(
 
     // Step 3: Check if we found relevant documents
     if (similarDocs.length === 0 || similarDocs[0].similarity < 0.7) {
+      // Small-talk detected: generate response with Groq (no RAG context)
+      console.log("[RAG] ⚡ Small-talk detected, using Groq without RAG context");
+      const smallTalkResponse = await generateRAGResponse(
+        question,
+        "", // No context for small-talk
+        userRegion,
+        language,
+        model,
+        reasoningEnabled,
+      );
       return {
-        answer: getNoResultsMessage(language),
+        ...smallTalkResponse,
         sources: [],
-        metadata: {
-          model: "none",
-          tokens_used: 0,
-          response_time_ms: 0,
-        },
       };
     }
 

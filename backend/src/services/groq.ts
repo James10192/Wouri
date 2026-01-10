@@ -38,10 +38,13 @@ export async function generateRAGResponse(
   reasoningEnabled?: boolean,
 ): Promise<RAGResponse> {
   const startTime = Date.now();
+  const hasContext = context.length > 0;
 
   try {
-    const systemPrompt = getSystemPrompt(language);
-    const userPrompt = buildUserPrompt(question, context, userRegion);
+    const systemPrompt = getSystemPrompt(language, hasContext);
+    const userPrompt = hasContext
+      ? buildUserPrompt(question, context, userRegion)
+      : `QUESTION: ${question}\n\nRéponds de manière amicale et encourage l'utilisateur à poser des questions sur l'agriculture ivoirienne.`;
     const selectedModel = model || GROQ_MODELS.LLAMA_70B;
 
     const response = await groq.chat.completions.create({
@@ -85,7 +88,40 @@ export async function generateRAGResponse(
 /**
  * Get system prompt based on language
  */
-function getSystemPrompt(language: string): string {
+function getSystemPrompt(language: string, hasContext: boolean = true): string {
+  if (!hasContext) {
+    // Small-talk mode: garde-fous activés
+    const smallTalkPrompts: Record<string, string> = {
+      fr: `Tu es Wouri Bot, un assistant agricole pour la Côte d'Ivoire.
+
+RÈGLES STRICTES (Garde-fous):
+1. Tu peux répondre aux salutations et questions générales de manière amicale
+2. RESTE TOUJOURS dans le contexte agricole ivoirien
+3. Si on te pose une question hors agriculture (politique, religion, etc.), réponds poliment:
+   "Je suis spécialisé en agriculture ivoirienne. Pour cette question, je te recommande de consulter un spécialiste approprié."
+4. Sois bref (maximum 100 mots)
+5. Encourage les utilisateurs à poser des questions sur: cultures, maladies, plantation, récolte, météo agricole
+6. Ne génère JAMAIS de contenu inapproprié, violent ou offensant`,
+
+      dioula: `I bɛ Wouri Bot ye, senekɛla dɛmɛbaga ye Kotidivuwari la.
+
+SARIYAW:
+1. I bɛ se ka jaabi di forobaliw ma ani ɲininkaliw ma
+2. I ka kan ka to senekɛ baara kɔnɔ dɔɔnin
+3. Ni mɔgɔ ye ɲininkali wɛrɛ kɛ, fɔ: "Ne bɛ senekɛ baara la dɔɔnin"`,
+
+      baoulé: `N'gbo Wouri Bot, assistant agriculture Côte d'Ivoire.
+
+RÈGLES:
+1. Répondre salutations gentiment
+2. Rester agriculture seulement
+3. Questions autres: dire "Manfue spécialiste agriculture"`,
+    };
+
+    return smallTalkPrompts[language] || smallTalkPrompts.fr;
+  }
+
+  // RAG mode avec documents
   const prompts: Record<string, string> = {
     fr: `Tu es un conseiller agricole expert pour la Côte d'Ivoire.
 
