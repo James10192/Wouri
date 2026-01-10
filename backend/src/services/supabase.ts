@@ -167,17 +167,11 @@ export async function searchDocumentsByKeyword(
 }
 
 /**
- * Get embedding for text (using Supabase Edge Function or Groq)
- * For now, we'll use Groq's embedding model (free)
+ * Get embedding for text using production embedding service
+ * Uses Supabase Edge Function with all-MiniLM-L6-v2 model (768 dimensions)
  */
 export async function getTextEmbedding(text: string): Promise<number[]> {
-  // TODO: Implement Groq embedding or use Supabase Edge Function
-  // In production, call the same embedding model used to index documents.
-  if (config.NODE_ENV !== "production") {
-    // Keep dev/test deterministic to match mock embeddings in docs.
-    return new Array(768).fill(0);
-  }
-
-  // Mock embedding (replace with actual API call)
-  return new Array(768).fill(0).map(() => Math.random());
+  // Import production embedding service
+  const { getTextEmbedding: embedFn } = await import("@/services/embeddings");
+  return embedFn(text);
 }

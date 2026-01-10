@@ -58,6 +58,10 @@ app.route("/webhooks", webhooks);
 // Models endpoint
 app.route("/models", models);
 
+// Admin dashboard API (protected with API key)
+const admin = await import("@/routes/admin");
+app.route("/admin", admin.default);
+
 // Test routes (Development only)
 if (config.NODE_ENV === "development") {
   app.route("/test", test);

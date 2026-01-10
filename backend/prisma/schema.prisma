@@ -55,17 +55,67 @@ model Document {
 // ============================================================================
 
 model Conversation {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  waId        String   @map("wa_id")
-  messageId   String   @unique @map("message_id") // WhatsApp message ID
-  messageType String   @map("message_type") // "text" | "audio" | "image"
-  userMessage String   @map("user_message") @db.Text
-  botResponse String?  @map("bot_response") @db.Text
-  language    String   @default("fr")
-  region      String?
-  createdAt   DateTime @default(now()) @map("created_at")
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  waId           String    @map("wa_id")
+  messageId      String    @unique @map("message_id") // WhatsApp message ID
+  messageType    String    @map("message_type") // "text" | "audio" | "image"
+  userMessage    String    @map("user_message") @db.Text
+  botResponse    String?   @map("bot_response") @db.Text
+  language       String    @default("fr")
+  region         String?
+  feedbackCount  Int       @default(0) @map("feedback_count")
+  averageRating  Decimal?  @map("average_rating") @db.Decimal(3, 2)
+  modelUsed      String?   @map("model_used")
+  tokensUsed     Int?      @map("tokens_used")
+  responseTimeMs Int?      @map("response_time_ms")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  feedback Feedback[]
 
   @@map("conversations")
+}
+
+// ============================================================================
+// Feedback Table (Admin Feedback Loop)
+// ============================================================================
+
+model Feedback {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String?       @map("conversation_id") @db.Uuid
+  waId           String        @map("wa_id")
+  rating         Int?          // 1-5 stars
+  comment        String?       @db.Text
+  embedding      String?       // VECTOR(768) - managed via raw SQL
+  isEmbedded     Boolean       @default(false) @map("is_embedded")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([waId])
+  @@index([conversationId])
+  @@map("feedback")
+}
+
+// ============================================================================
+// Translations Table (Multilingual Dictionary)
+// ============================================================================
+
+model Translation {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceText      String   @map("source_text") @db.Text
+  sourceLanguage  String   @map("source_language") // "fr" | "dioula" | "baoulé" | "en"
+  targetLanguage  String   @map("target_language") // "fr" | "dioula" | "baoulé" | "en"
+  translatedText  String   @map("translated_text") @db.Text
+  context         String?  @db.Text
+  verified        Boolean  @default(false)
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([sourceText, sourceLanguage, targetLanguage], map: "unique_translation")
+  @@index([sourceLanguage, targetLanguage])
+  @@map("translations")
 }
 
 // ============================================================================

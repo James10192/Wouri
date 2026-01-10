@@ -28,6 +28,9 @@ export const envSchema = z.object({
 
   // OpenWeatherMap
   OPENWEATHER_API_KEY: z.string().min(1),
+
+  // Admin API
+  ADMIN_API_KEY: z.string().min(32).optional(), // Minimum 32 characters for security
 });
 
 export type Env = z.infer<typeof envSchema>;
