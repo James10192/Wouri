@@ -27,7 +27,13 @@ test.get("/health", (c) => {
 test.post("/chat", async (c) => {
   try {
     const body = await c.req.json();
-    const { question, region = "Côte d'Ivoire", language = "fr" } = body;
+    const {
+      question,
+      region = "Côte d'Ivoire",
+      language = "fr",
+      model,
+      reasoningEnabled = false,
+    } = body;
 
     if (!question) {
       return c.json({ error: "Question is required" }, 400);
@@ -36,7 +42,9 @@ test.post("/chat", async (c) => {
     console.log(`\n🌾 Testing RAG pipeline:`);
     console.log(`   Question: ${question}`);
     console.log(`   Region: ${region}`);
-    console.log(`   Language: ${language}\n`);
+    console.log(`   Language: ${language}`);
+    console.log(`   Model: ${model || "default"}`);
+    console.log(`   Reasoning: ${reasoningEnabled}\n`);
 
     // Appeler le RAG pipeline
     const response: RAGResponse = await ragPipeline(

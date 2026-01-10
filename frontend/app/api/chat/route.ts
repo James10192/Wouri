@@ -93,8 +93,8 @@ export async function POST(req: Request) {
       // Write usage metadata
       if (data.usage) {
         writer.write({
-          type: "message-annotations",
-          annotations: [{ type: "usage", value: data.usage }],
+          type: "message-metadata",
+          messageMetadata: { usage: data.usage },
         })
       }
 
