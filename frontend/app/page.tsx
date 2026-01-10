@@ -24,6 +24,7 @@ import {
   PromptInputButton,
   PromptInputHeader,
   type PromptInputMessage,
+  PromptInputSpeechButton,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputFooter,
@@ -115,6 +116,7 @@ const ChatBotDemo = () => {
     regenerate,
     setMessages,
   } = useChat()
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const pendingModelRef = useRef(model)
   const { addConversation, updateConversation, getCurrentConversation } =
     useConversationStore()
@@ -571,6 +573,7 @@ const ChatBotDemo = () => {
             </PromptInputHeader>
             <PromptInputBody>
               <PromptInputTextarea
+                ref={textareaRef}
                 onChange={(e) => setInput(e.target.value)}
                 value={input}
               />
@@ -583,6 +586,7 @@ const ChatBotDemo = () => {
                     <PromptInputActionAddAttachments />
                   </PromptInputActionMenuContent>
                 </PromptInputActionMenu>
+                <PromptInputSpeechButton textareaRef={textareaRef} />
                 {reasoningAvailable && (
                   <PromptInputButton
                     variant={reasoningEnabled ? "default" : "ghost"}

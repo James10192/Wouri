@@ -218,6 +218,7 @@ export type MessageBranchSelectorProps = HTMLAttributes<HTMLDivElement> & {
 export const MessageBranchSelector = ({
   className,
   from,
+  children,
   ...props
 }: MessageBranchSelectorProps) => {
   const { totalBranches } = useMessageBranch();
@@ -229,10 +230,16 @@ export const MessageBranchSelector = ({
 
   return (
     <ButtonGroup
-      className="[&>*:not(:first-child)]:rounded-l-md [&>*:not(:last-child)]:rounded-r-md"
+      className={cn(
+        "[&>*:not(:first-child)]:rounded-l-md [&>*:not(:last-child)]:rounded-r-md",
+        from === "user" ? "ml-auto" : "",
+        className
+      )}
       orientation="horizontal"
       {...props}
-    />
+    >
+      {children}
+    </ButtonGroup>
   );
 };
 
