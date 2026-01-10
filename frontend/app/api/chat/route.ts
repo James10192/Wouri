@@ -10,6 +10,8 @@ type ChatBody = {
   messages: UIMessage[]
   region?: string
   language?: string
+  model?: string
+  reasoningEnabled?: boolean
 }
 
 function extractUserQuestion(messages: UIMessage[]) {
@@ -41,6 +43,8 @@ export async function POST(req: Request) {
       question,
       region: body.region,
       language: body.language,
+      model: body.model,
+      reasoningEnabled: body.reasoningEnabled,
     }),
   })
 
@@ -51,17 +55,49 @@ export async function POST(req: Request) {
     })
   }
 
-  const data = (await response.json()) as { answer?: string }
+  const data = (await response.json()) as {
+    answer?: string
+    reasoning?: string
+    usage?: {
+      inputTokens: number
+      outputTokens: number
+      reasoningTokens?: number
+    }
+  }
   const answer = data.answer || "Aucune reponse renvoyee par le backend."
+  const reasoning = data.reasoning || ""
 
   const stream = createUIMessageStream({
     originalMessages: body.messages,
-    execute: ({ writer }) => {
+    execute: async ({ writer }) => {
       writer.write({ type: "start" })
       writer.write({ type: "start-step" })
+
+      // Write reasoning if enabled
+      if (body.reasoningEnabled && reasoning) {
+        writer.write({ type: "reasoning-start", id: "reasoning-1" })
+        writer.write({
+          type: "reasoning-delta",
+          id: "reasoning-1",
+          delta: reasoning,
+        })
+        writer.write({ type: "reasoning-end", id: "reasoning-1" })
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      }
+
+      // Write answer
       writer.write({ type: "text-start", id: "text-1" })
       writer.write({ type: "text-delta", id: "text-1", delta: answer })
       writer.write({ type: "text-end", id: "text-1" })
+
+      // Write usage metadata
+      if (data.usage) {
+        writer.write({
+          type: "message-annotations",
+          annotations: [{ type: "usage", value: data.usage }],
+        })
+      }
+
       writer.write({ type: "finish-step" })
       writer.write({ type: "finish" })
     },
