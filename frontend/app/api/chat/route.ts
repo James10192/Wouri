@@ -25,7 +25,7 @@ function extractUserQuestion(messages: UIMessage[]) {
 
 export async function POST(req: Request) {
   const body = (await req.json()) as ChatBody
-  const question = extractUserQuestion(body.messages)
+  const question = extractUserQuestion(body.messages || [])
 
   if (!question) {
     return new Response("Missing user question.", { status: 400 })
@@ -73,7 +73,6 @@ export async function POST(req: Request) {
       writer.write({ type: "start" })
       writer.write({ type: "start-step" })
 
-      // Write reasoning if enabled
       if (body.reasoningEnabled && reasoning) {
         writer.write({ type: "reasoning-start", id: "reasoning-1" })
         writer.write({
@@ -85,12 +84,10 @@ export async function POST(req: Request) {
         await new Promise((resolve) => setTimeout(resolve, 200))
       }
 
-      // Write answer
       writer.write({ type: "text-start", id: "text-1" })
       writer.write({ type: "text-delta", id: "text-1", delta: answer })
       writer.write({ type: "text-end", id: "text-1" })
 
-      // Write usage metadata
       if (data.usage) {
         writer.write({
           type: "message-metadata",

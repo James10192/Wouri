@@ -16,8 +16,8 @@ interface SidebarProps {
 
 export function Sidebar({ onNewConversation, currentModel }: SidebarProps) {
   return (
-    <aside className="hidden h-full w-72 border-r bg-muted/20 lg:flex">
-      <Card className="m-4 flex h-[calc(100%-2rem)] w-full flex-col">
+    <aside className="hidden h-full w-72 shrink-0 overflow-hidden border-r bg-muted/20 lg:flex">
+      <Card className="m-4 flex h-[calc(100%-2rem)] w-full flex-col overflow-hidden">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -41,7 +41,7 @@ export function Sidebar({ onNewConversation, currentModel }: SidebarProps) {
             <PlusIcon className="mr-2 size-4" />
             Nouvelle conversation
           </Button>
-          <p className="text-xs text-muted-foreground text-center">
+          <p className="text-xs text-muted-foreground text-center max-w-full truncate">
             Modèle actuel: {currentModel}
           </p>
         </CardFooter>

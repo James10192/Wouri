@@ -125,6 +125,9 @@ const ChatBotDemo = () => {
   const reasoningAvailable =
     availableModels.find((modelItem) => modelItem.value === model)
       ?.reasoningSupported || false
+  const isReasoningModel = (modelId?: string) =>
+    availableModels.find((modelItem) => modelItem.value === modelId)
+      ?.reasoningSupported || false
 
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text)
@@ -382,7 +385,7 @@ const ChatBotDemo = () => {
                             </SourcesContent>
                           ))}
                       </Sources>
-                    )}
+                  )}
                   {message.parts.map((part, i) => {
                     switch (part.type) {
                       case "text":
@@ -420,6 +423,13 @@ const ChatBotDemo = () => {
                           </Message>
                         )
                       case "reasoning":
+                        if (
+                          !isReasoningModel(
+                            modelByMessageId[message.id] || model
+                          )
+                        ) {
+                          return null
+                        }
                         return (
                           <Reasoning
                             key={`${message.id}-${i}`}
@@ -435,34 +445,76 @@ const ChatBotDemo = () => {
                         )
                       case "tool-invocation":
                         const toolData = part as any
+                        const hasResult =
+                          toolData.result || toolData.errorText
+                        const isVectorSearch =
+                          Boolean(toolData.result?.embedding_preview) ||
+                          Boolean(toolData.result?.results) ||
+                          String(toolData.toolName || "")
+                            .toLowerCase()
+                            .includes("vector") ||
+                          String(toolData.toolName || "")
+                            .toLowerCase()
+                            .includes("embedding")
+                        const vectorOutput = isVectorSearch && toolData.result ? (
+                          <div className="space-y-2 text-sm">
+                            <p className="font-medium">Documents trouves:</p>
+                            <div className="space-y-3">
+                              {toolData.result?.results?.map(
+                                (doc: any, idx: number) => (
+                                  <div
+                                    key={idx}
+                                    className="border-l-2 border-primary/50 pl-3"
+                                  >
+                                    <p className="text-xs text-muted-foreground">
+                                      Similarite:{" "}
+                                      {(doc.similarity * 100).toFixed(1)}%
+                                    </p>
+                                    <p>{doc.content}</p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Source: {doc.metadata?.source}, Page{" "}
+                                      {doc.metadata?.page}
+                                    </p>
+                                  </div>
+                                )
+                              )}
+                              {!toolData.result?.results?.length && (
+                                <p className="text-muted-foreground">
+                                  Aucun document trouve.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ) : null
                         return (
                           <Tool key={`${message.id}-${i}`} defaultOpen>
                             <ToolHeader
-                              title="🔍 Recherche Vectorielle (pgvector)"
+                              title={
+                                isVectorSearch
+                                  ? "🔍 Recherche Vectorielle (pgvector)"
+                                  : undefined
+                              }
                               type="tool-invocation"
-                              state={toolData.state || "complete"}
+                              state={toolData.state || "output-available"}
                             />
                             <ToolContent>
-                              <ToolInput input={toolData.args || {}}>
-                                <div className="space-y-1 text-sm">
-                                  <p><strong>Question:</strong> {toolData.result?.query || "N/A"}</p>
-                                  <p><strong>Embedding:</strong> <code className="text-xs">{JSON.stringify(toolData.result?.embedding_preview)}</code></p>
+                              {toolData.args && (
+                                <ToolInput input={toolData.args} />
+                              )}
+                              {!hasResult &&
+                              (toolData.state === "input-streaming" ||
+                                toolData.state === "input-available") ? (
+                                <div className="px-4 pb-4 text-sm text-muted-foreground">
+                                  <Shimmer duration={1}>
+                                    Chargement des resultats...
+                                  </Shimmer>
                                 </div>
-                              </ToolInput>
-                              <ToolOutput result={toolData.result || {}}>
-                                <div className="space-y-2">
-                                  <p className="font-medium">Documents trouvés:</p>
-                                  {toolData.result?.results?.map((doc: any, idx: number) => (
-                                    <div key={idx} className="border-l-2 border-primary/50 pl-3">
-                                      <p className="text-xs text-muted-foreground">Similarité: {(doc.similarity * 100).toFixed(1)}%</p>
-                                      <p className="text-sm">{doc.content}</p>
-                                      <p className="text-xs text-muted-foreground mt-1">
-                                        Source: {doc.metadata?.source}, Page {doc.metadata?.page}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </ToolOutput>
+                              ) : (
+                                <ToolOutput
+                                  output={vectorOutput ?? toolData.result}
+                                  errorText={toolData.errorText}
+                                />
+                              )}
                             </ToolContent>
                           </Tool>
                         )

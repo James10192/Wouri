@@ -46,21 +46,55 @@ export async function generateRAGResponse(
       ? buildUserPrompt(question, context, userRegion)
       : `QUESTION: ${question}\n\nRéponds de manière amicale et encourage l'utilisateur à poser des questions sur l'agriculture ivoirienne.`;
     const selectedModel = model || GROQ_MODELS.LLAMA_70B;
+    const shouldExtractReasoning =
+      Boolean(reasoningEnabled) && isReasoningModel(selectedModel);
+    const promptSuffix = shouldExtractReasoning
+      ? `\n\nIMPORTANT: Réponds UNIQUEMENT en JSON strict au format suivant:\n` +
+        `{"reasoning":"...","answer":"..."}\n` +
+        `Le champ "reasoning" doit etre bref (1-3 phrases). ` +
+        `N'ajoute aucun texte en dehors du JSON.`
+      : "";
 
-    const response = await groq.chat.completions.create({
+    const requestBody: any = {
       model: selectedModel,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
+        { role: "user", content: `${userPrompt}${promptSuffix}` },
       ],
       temperature: 0.3, // Low creativity (factual answers)
-      max_tokens: 300,
+      max_tokens: shouldExtractReasoning ? 600 : 300,
       top_p: 0.9,
-    });
+    };
 
-    const answer = response.choices[0]?.message?.content || "Je n'ai pas pu générer de réponse.";
-    const reasoning = reasoningEnabled && response.choices[0]?.message?.reasoning ?
-      response.choices[0].message.reasoning : undefined;
+    if (shouldExtractReasoning) {
+      requestBody.response_format = { type: "json_object" };
+    }
+
+    let response: any;
+    try {
+      response = await groq.chat.completions.create(requestBody);
+    } catch (error) {
+      if (!shouldExtractReasoning) {
+        throw error;
+      }
+      const fallbackRequest = { ...requestBody };
+      delete fallbackRequest.response_format;
+      response = await groq.chat.completions.create(fallbackRequest);
+    }
+
+    const rawContent =
+      response.choices[0]?.message?.content ||
+      "Je n'ai pas pu générer de réponse.";
+    const parsed = shouldExtractReasoning
+      ? extractReasoningPayload(rawContent)
+      : null;
+    const answer = parsed
+      ? parsed.answer || "Je n'ai pas pu generer de reponse."
+      : rawContent;
+    const reasoning =
+      (reasoningEnabled && response.choices[0]?.message?.reasoning) ||
+      parsed?.reasoning ||
+      undefined;
     const tokensUsed = response.usage?.total_tokens || 0;
     const responseTime = Date.now() - startTime;
 
@@ -197,6 +231,170 @@ function extractSources(context: string): Array<{ source: string; page?: number;
 export function isReasoningModel(modelId: string): boolean {
   const reasoningModels = ["qwen/qwen3-32b", "qwen-32b", "deepseek-r1"];
   return reasoningModels.some((model) => modelId.toLowerCase().includes(model));
+}
+
+type ParsedReasoningPayload = {
+  reasoning?: string;
+  answer?: string;
+};
+
+function extractReasoningPayload(content: string): ParsedReasoningPayload | null {
+  const trimmed = content.trim();
+  const located = extractJsonPayloadWithSlice(trimmed);
+  if (located?.payload) {
+    const prefix = trimmed.slice(0, located.start).trim();
+    const suffix = trimmed.slice(located.end + 1).trim();
+    const normalized = normalizePayload(located.payload);
+    if (!normalized) {
+      return null;
+    }
+    const reasoning =
+      normalized.reasoning || (prefix ? prefix : undefined);
+    const answer =
+      normalized.answer ||
+      (suffix ? suffix : undefined);
+    return normalizePayload({ reasoning, answer });
+  }
+
+  const reasoning = extractJsonStringValue(trimmed, "reasoning");
+  const answer = extractJsonStringValue(trimmed, "answer");
+  if (!reasoning && !answer) {
+    return null;
+  }
+
+  return normalizePayload({ reasoning, answer });
+}
+
+function extractJsonPayload(content: string): ParsedReasoningPayload | null {
+  const trimmed = content.trim();
+  const direct = safeJsonParse(trimmed);
+  if (direct) {
+    return normalizePayload(direct);
+  }
+
+  const fencedMatch = trimmed.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) {
+    const fenced = safeJsonParse(fencedMatch[1].trim());
+    if (fenced) {
+      return normalizePayload(fenced);
+    }
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const slice = trimmed.slice(firstBrace, lastBrace + 1);
+    const sliced = safeJsonParse(slice);
+    if (sliced) {
+      return normalizePayload(sliced);
+    }
+  }
+
+  return null;
+}
+
+type JsonSliceResult = {
+  payload: any;
+  start: number;
+  end: number;
+};
+
+function extractJsonPayloadWithSlice(content: string): JsonSliceResult | null {
+  const trimmed = content.trim();
+  const direct = safeJsonParse(trimmed);
+  if (direct) {
+    return { payload: direct, start: 0, end: trimmed.length - 1 };
+  }
+
+  const fencedMatch = trimmed.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch?.[1]) {
+    const fenced = safeJsonParse(fencedMatch[1].trim());
+    if (fenced) {
+      const start = trimmed.indexOf(fencedMatch[0]);
+      const end = start + fencedMatch[0].length - 1;
+      return { payload: fenced, start, end };
+    }
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    const slice = trimmed.slice(firstBrace, lastBrace + 1);
+    const sliced = safeJsonParse(slice);
+    if (sliced) {
+      return { payload: sliced, start: firstBrace, end: lastBrace };
+    }
+  }
+
+  return null;
+}
+
+function safeJsonParse(value: string): any | null {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function normalizePayload(payload: any): ParsedReasoningPayload | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const reasoning =
+    typeof payload.reasoning === "string" ? payload.reasoning : undefined;
+  const answer =
+    typeof payload.answer === "string" ? payload.answer : undefined;
+
+  if (!reasoning && !answer) {
+    return null;
+  }
+
+  return { reasoning, answer };
+}
+
+function extractJsonStringValue(content: string, key: string): string | undefined {
+  const keyPattern = new RegExp(`"${key}"\\s*:\\s*"`, "i");
+  const match = keyPattern.exec(content);
+  if (!match) {
+    return undefined;
+  }
+
+  let index = match.index + match[0].length;
+  let escaped = false;
+  let value = "";
+
+  while (index < content.length) {
+    const char = content[index];
+    if (!escaped && char === "\"") {
+      break;
+    }
+    if (!escaped && char === "\\") {
+      escaped = true;
+      value += char;
+      index += 1;
+      continue;
+    }
+    escaped = false;
+    value += char;
+    index += 1;
+  }
+
+  if (!value) {
+    return undefined;
+  }
+
+  const normalized = maybeUnescapeJsonString(value.trim());
+  return normalized || value.trim();
+}
+
+function maybeUnescapeJsonString(value: string): string | null {
+  try {
+    return JSON.parse(`"${value.replace(/\n/g, "\\n")}"`);
+  } catch {
+    return null;
+  }
 }
 
 /**
