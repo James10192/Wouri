@@ -5,8 +5,9 @@
 
 set -e
 
-API_BASE_URL="http://localhost:4456"
-ADMIN_API_KEY="9ddab39eb66f38a312c79e4e24aa2beaf0ba331ca7109346695e6cfd89fd99d1"
+# Use environment variables from GitHub Actions workflow, fallback to defaults for local testing
+API_BASE_URL="${API_BASE_URL:-http://localhost:4456}"
+ADMIN_API_KEY="${ADMIN_API_KEY:-9ddab39eb66f38a312c79e4e24aa2beaf0ba331ca7109346695e6cfd89fd99d1}"
 
 echo "=========================================="
 echo "🧪 WOURI BOT - ADMIN API TESTS"
