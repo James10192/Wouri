@@ -8,13 +8,20 @@ models.get("/", async (c) => {
     const response = await groq.models.list();
     const data = response.data || [];
 
-    const modelList = data.map((model) => ({
-      id: model.id,
-      owned_by: model.owned_by,
-      context_window: model.context_window,
-      active: model.active,
-      reasoning_supported: isReasoningModel(model.id),
-    }));
+    const modelList = data.map((model) => {
+      const raw = model as {
+        context_window?: number;
+        active?: boolean;
+      };
+
+      return {
+        id: model.id,
+        owned_by: model.owned_by,
+        context_window: raw.context_window ?? null,
+        active: raw.active ?? null,
+        reasoning_supported: isReasoningModel(model.id),
+      };
+    });
 
     return c.json({ success: true, models: modelList });
   } catch (error: any) {
