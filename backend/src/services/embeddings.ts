@@ -45,7 +45,7 @@ export async function getTextEmbedding(text: string): Promise<number[]> {
       throw new Error(`Embedding API error (${response.status}): ${errorText}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as any;
 
     if (!data.embedding || !Array.isArray(data.embedding)) {
       throw new Error("Invalid embedding response format");
