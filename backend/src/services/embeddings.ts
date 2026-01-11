@@ -34,42 +34,58 @@ export async function getTextEmbedding(
   }
 
   try {
-    const controller = new AbortController();
-    const timeoutId = options.timeoutMs
-      ? setTimeout(() => controller.abort(), options.timeoutMs)
-      : undefined;
+    const defaultTimeout = parseInt(config.EMBEDDING_TIMEOUT_MS || "8000", 10);
+    const timeoutMs = options.timeoutMs ?? defaultTimeout;
+    let attempts = 2;
 
-    const response = await fetch(EMBEDDING_FUNCTION_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${config.SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ text: text.trim() }),
-      signal: controller.signal,
-    });
+    while (attempts > 0) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (timeoutId) {
-      clearTimeout(timeoutId);
+      try {
+        const response = await fetch(EMBEDDING_FUNCTION_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${config.SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ text: text.trim() }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Embedding API error (${response.status}): ${errorText}`);
+        }
+
+        const data = (await response.json()) as any;
+
+        if (!data.embedding || !Array.isArray(data.embedding)) {
+          throw new Error("Invalid embedding response format");
+        }
+
+        // Validate embedding dimension (should be 384 for all-MiniLM-L6-v2)
+        if (data.embedding.length !== 384) {
+          throw new Error(
+            `Invalid embedding dimension: expected 384, got ${data.embedding.length}`
+          );
+        }
+
+        clearTimeout(timeoutId);
+        return data.embedding as number[];
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        attempts -= 1;
+
+        if (error?.name !== "AbortError" || attempts === 0) {
+          throw error;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
     }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Embedding API error (${response.status}): ${errorText}`);
-    }
-
-    const data = (await response.json()) as any;
-
-    if (!data.embedding || !Array.isArray(data.embedding)) {
-      throw new Error("Invalid embedding response format");
-    }
-
-    // Validate embedding dimension (should be 384 for all-MiniLM-L6-v2)
-    if (data.embedding.length !== 384) {
-      throw new Error(`Invalid embedding dimension: expected 384, got ${data.embedding.length}`);
-    }
-
-    return data.embedding as number[];
+    throw new Error("Embedding retry attempts exhausted");
   } catch (error: any) {
     if (error?.name === "AbortError") {
       throw new Error("Embedding request timed out");

@@ -32,6 +32,14 @@ export const envSchema = z.object({
 
   // Admin API
   ADMIN_API_KEY: z.string().min(32).optional(), // Minimum 32 characters for security
+
+  // Timeout configuration (optional)
+  VERCEL_FUNCTION_TIMEOUT: z.string().optional().default("60000"),
+  EMBEDDING_TIMEOUT_MS: z.string().optional().default("8000"),
+  SEARCH_TIMEOUT_MS: z.string().optional().default("10000"),
+  GROQ_TIMEOUT_MS: z.string().optional().default("30000"),
+  WEATHER_TIMEOUT_MS: z.string().optional().default("3000"),
+  RAG_PIPELINE_TIMEOUT_MS: z.string().optional().default("45000"),
 });
 
 export type Env = z.infer<typeof envSchema>;

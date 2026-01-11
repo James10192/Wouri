@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { ragPipeline } from "../lib/rag";
 import { insertConversationLog } from "../services/supabase";
+import { getTextEmbedding } from "../services/embeddings";
+import { adminSupabase } from "../services/supabase";
 import type { RAGResponse } from "../types";
 
 const test = new Hono();
@@ -14,6 +16,56 @@ test.get("/health", (c) => {
     message: "Wouri Bot backend is running!",
     timestamp: new Date().toISOString(),
   });
+});
+
+/**
+ * POST /test/ping - Simple POST without DB
+ */
+test.post("/ping", (c) => {
+  return c.json({ status: "pong", timestamp: new Date().toISOString() });
+});
+
+/**
+ * POST /test/db-check - Minimal DB read
+ */
+test.post("/db-check", async (c) => {
+  const { data, error } = await adminSupabase
+    .from("users")
+    .select("id")
+    .limit(1)
+    .single();
+
+  return c.json({
+    success: !error,
+    data: data || null,
+    error: error?.message,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
+ * POST /test/embedding-only - Embedding without DB write
+ */
+test.post("/embedding-only", async (c) => {
+  try {
+    const embedding = await getTextEmbedding("Test embedding generation", {
+      timeoutMs: 8000,
+    });
+    return c.json({
+      success: true,
+      dimensions: embedding.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    return c.json(
+      {
+        success: false,
+        error: error.message || "Embedding failed",
+        timestamp: new Date().toISOString(),
+      },
+      500
+    );
+  }
 });
 
 /**

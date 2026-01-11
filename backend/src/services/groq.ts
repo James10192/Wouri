@@ -71,16 +71,25 @@ export async function generateRAGResponse(
       requestBody.response_format = { type: "json_object" };
     }
 
+    const timeoutMs = parseInt(config.GROQ_TIMEOUT_MS || "30000", 10);
     let response: any;
     try {
-      response = await groq.chat.completions.create(requestBody);
+      response = await withTimeout(
+        groq.chat.completions.create(requestBody),
+        timeoutMs,
+        "Groq",
+      );
     } catch (error) {
       if (!shouldExtractReasoning) {
         throw error;
       }
       const fallbackRequest = { ...requestBody };
       delete fallbackRequest.response_format;
-      response = await groq.chat.completions.create(fallbackRequest);
+      response = await withTimeout(
+        groq.chat.completions.create(fallbackRequest),
+        timeoutMs,
+        "Groq fallback",
+      );
     }
 
     const rawContent =
@@ -216,6 +225,23 @@ function buildNoContextPrompt(
   return `${conversationContext ? `${conversationContext}\n\n` : ""}QUESTION: ${question}
 
 Réponds de manière amicale et encourage l'utilisateur à poser des questions sur l'agriculture ivoirienne.`;
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timeout after ${ms}ms`));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 /**

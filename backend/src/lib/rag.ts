@@ -23,9 +23,10 @@ export async function ragPipeline(
   console.log(`[RAG] Processing question for region: ${userRegion}, language: ${language}`);
 
   try {
-    const isVercel = Boolean(process.env["VERCEL"]);
-    const EMBEDDING_TIMEOUT_MS = isVercel ? 3000 : 10000;
-    const SEARCH_TIMEOUT_MS = isVercel ? 5000 : 15000;
+    const embeddingTimeoutMs = parseInt(config.EMBEDDING_TIMEOUT_MS || "8000", 10);
+    const searchTimeoutMs = parseInt(config.SEARCH_TIMEOUT_MS || "10000", 10);
+    const weatherTimeoutMs = parseInt(config.WEATHER_TIMEOUT_MS || "3000", 10);
+    const pipelineTimeoutMs = parseInt(config.RAG_PIPELINE_TIMEOUT_MS || "45000", 10);
     const regionFilter = shouldFilterRegion(userRegion)
       ? { region: userRegion }
       : undefined;
@@ -48,136 +49,19 @@ export async function ragPipeline(
     const augmentedQuery = conversationContext
       ? `${conversationContext}\n\n${question}`
       : question;
-    let embedding: number[];
-    try {
-      embedding = await withTimeout(
-        getTextEmbedding(augmentedQuery, { timeoutMs: EMBEDDING_TIMEOUT_MS }),
-        EMBEDDING_TIMEOUT_MS,
-        "embedding",
-      );
-    } catch (error: any) {
-      console.warn("⚠️ Embedding timeout, falling back to no-context response:", error?.message);
-      const fallback = await generateRAGResponse(
-        question,
-        "",
-        userRegion,
-        language,
-        model,
-        reasoningEnabled,
-        conversationContext,
-      );
-      return {
-        ...fallback,
-        sources: [],
-        debug: {
-          toolInvocations: [
-            {
-              toolName: "vector_search",
-              state: "output-error",
-              args: {
-                query: question,
-                context: conversationContext || undefined,
-                match_threshold: 0.7,
-                match_count: 5,
-                filter: regionFilter || {},
-              },
-              errorText: error?.message || "Embedding timeout",
-            },
-          ],
-        },
-      };
-    }
-
-    // Step 2: Search similar documents in Supabase pgvector
-    const similarDocs = await withTimeout(
-      searchSimilarDocuments(
-        embedding,
-        0.7, // Similarity threshold (70%)
-        5, // Top 5 most relevant documents
-        regionFilter, // Filter by user's region when specific
-      ),
-      SEARCH_TIMEOUT_MS,
-      "vector search",
-    );
-
-    // Log vector search for Tool visualization (dev only)
-    if (config.NODE_ENV === "development") {
-      const { setLastVectorSearch } = await import("../routes/debug");
-      setLastVectorSearch({
-        query: question,
-        embedding_preview: embeddingPreview(embedding),
-        results: similarDocs.map(d => ({
-          id: (d as any).id || "unknown",
-          similarity: d.similarity,
-          content: d.content.slice(0, 150) + "...",
-          metadata: d.metadata,
-        })),
-        timestamp: new Date().toISOString(),
-      });
-    }
-    toolInvocations.push({
-      toolName: "vector_search",
-      state: "output-available",
-      args: {
-        query: question,
-        context: conversationContext || undefined,
-        match_threshold: 0.7,
-        match_count: 5,
-        filter: regionFilter || {},
-      },
-      result: {
-        embedding_preview: embeddingPreview(embedding),
-        results: similarDocs.map(d => ({
-          id: (d as any).id || "unknown",
-          similarity: d.similarity,
-          content: d.content.slice(0, 150) + "...",
-          metadata: d.metadata,
-        })),
-      },
-    });
-
-    let relevantDocs = similarDocs;
-    const topSimilarity = relevantDocs[0]?.similarity ?? 0;
-    const invalidSimilarity = Number.isNaN(topSimilarity);
-
-    // Step 3: Check if we found relevant documents
-    if (relevantDocs.length === 0 || invalidSimilarity || topSimilarity < 0.7) {
-      const keywordDocs = await withTimeout(
-        searchDocumentsByKeyword(
-          augmentedQuery,
-          5,
-          regionFilter,
-        ),
-        SEARCH_TIMEOUT_MS,
-        "keyword search",
-      );
-      if (keywordDocs.length > 0) {
-        console.log("[RAG] ⚡ Vector search empty, using keyword fallback");
-        relevantDocs = keywordDocs;
-        toolInvocations.push({
-          toolName: "keyword_search",
-          state: "output-available",
-          args: {
-            query: question,
-            context: conversationContext || undefined,
-            match_count: 5,
-            filter: regionFilter || {},
-          },
-          result: {
-            results: keywordDocs.map(d => ({
-              id: (d as any).id || "unknown",
-              similarity: d.similarity,
-              content: d.content.slice(0, 150) + "...",
-              metadata: d.metadata,
-            })),
-          },
-        });
-      } else {
-        // No relevant documents: respond without RAG context but keep conversation memory
-        console.log("[RAG] ⚠️ No relevant documents found, using general response");
-        const smallTalkResponse = await generateRAGResponse(
+    const pipeline = async () => {
+      let embedding: number[];
+      try {
+        embedding = await withTimeout(
+          getTextEmbedding(augmentedQuery, { timeoutMs: embeddingTimeoutMs }),
+          embeddingTimeoutMs,
+          "embedding",
+        );
+      } catch (error: any) {
+        console.warn("⚠️ Embedding timeout, falling back to no-context response:", error?.message);
+        const fallback = await generateRAGResponse(
           question,
-          "", // No context for small-talk
+          "",
           userRegion,
           language,
           model,
@@ -185,67 +69,196 @@ export async function ragPipeline(
           conversationContext,
         );
         return {
-          ...smallTalkResponse,
+          ...fallback,
           sources: [],
           debug: {
-            toolInvocations,
+            toolInvocations: [
+              {
+                toolName: "vector_search",
+                state: "output-error",
+                args: {
+                  query: question,
+                  context: conversationContext || undefined,
+                  match_threshold: 0.7,
+                  match_count: 5,
+                  filter: regionFilter || {},
+                },
+                errorText: error?.message || "Embedding timeout",
+              },
+            ],
           },
         };
       }
-    }
 
-    // Step 4: Build context from retrieved documents
-    let context = buildContext(relevantDocs);
-
-    // Step 4.5: Add weather data (if available)
-    console.log(`[RAG] 🌦️ Fetching weather for region: ${userRegion}`);
-    const weather = await getWeatherData(userRegion);
-    if (weather) {
+      // Step 2: Search similar documents in Supabase pgvector
+      const similarDocs = await withTimeout(
+        searchSimilarDocuments(
+          embedding,
+          0.7, // Similarity threshold (70%)
+          5, // Top 5 most relevant documents
+          regionFilter, // Filter by user's region when specific
+        ),
+        searchTimeoutMs,
+        "vector search",
+      );
+      // Log vector search for Tool visualization (dev only)
+      if (config.NODE_ENV === "development") {
+        const { setLastVectorSearch } = await import("../routes/debug");
+        setLastVectorSearch({
+          query: question,
+          embedding_preview: embeddingPreview(embedding),
+          results: similarDocs.map(d => ({
+            id: (d as any).id || "unknown",
+            similarity: d.similarity,
+            content: d.content.slice(0, 150) + "...",
+            metadata: d.metadata,
+          })),
+          timestamp: new Date().toISOString(),
+        });
+      }
       toolInvocations.push({
-        toolName: "weather_lookup",
+        toolName: "vector_search",
         state: "output-available",
         args: {
-          region: userRegion,
-          units: "metric",
+          query: question,
+          context: conversationContext || undefined,
+          match_threshold: 0.7,
+          match_count: 5,
+          filter: regionFilter || {},
         },
         result: {
-          region: weather.region,
-          temperature: weather.temperature,
-          feels_like: weather.feels_like,
-          humidity: weather.humidity,
-          description: weather.description,
-          wind_speed: weather.wind_speed,
-          rain_mm: weather.rain_mm ?? 0,
+          embedding_preview: embeddingPreview(embedding),
+          results: similarDocs.map(d => ({
+            id: (d as any).id || "unknown",
+            similarity: d.similarity,
+            content: d.content.slice(0, 150) + "...",
+            metadata: d.metadata,
+          })),
         },
       });
-      context += `\n\n[DONNÉES MÉTÉO ACTUELLES]\n${formatWeatherContext(weather)}\n`;
-    }
 
-    // Step 5: Generate answer using Groq (FREE & FAST!)
-    const response = await generateRAGResponse(
-      question,
-      context,
-      userRegion,
-      language,
-      model,
-      reasoningEnabled,
-      conversationContext,
-    );
+      let relevantDocs = similarDocs;
+      const topSimilarity = relevantDocs[0]?.similarity ?? 0;
+      const invalidSimilarity = Number.isNaN(topSimilarity);
 
-    // Step 6: Add weather advice if relevant
-    const weatherAdvice = weather ? buildWeatherAdvice(weather) : "";
-    if (weatherAdvice && response.answer) {
-      response.answer += weatherAdvice;
-    }
+      // Step 3: Check if we found relevant documents
+      if (relevantDocs.length === 0 || invalidSimilarity || topSimilarity < 0.7) {
+        const keywordDocs = await withTimeout(
+          searchDocumentsByKeyword(
+            augmentedQuery,
+            5,
+            regionFilter,
+          ),
+          searchTimeoutMs,
+          "keyword search",
+        );
+        if (keywordDocs.length > 0) {
+          console.log("[RAG] ⚡ Vector search empty, using keyword fallback");
+          relevantDocs = keywordDocs;
+          toolInvocations.push({
+            toolName: "keyword_search",
+            state: "output-available",
+            args: {
+              query: question,
+              context: conversationContext || undefined,
+              match_count: 5,
+              filter: regionFilter || {},
+            },
+            result: {
+              results: keywordDocs.map(d => ({
+                id: (d as any).id || "unknown",
+                similarity: d.similarity,
+                content: d.content.slice(0, 150) + "...",
+                metadata: d.metadata,
+              })),
+            },
+          });
+        } else {
+          // No relevant documents: respond without RAG context but keep conversation memory
+          console.log("[RAG] ⚠️ No relevant documents found, using general response");
+          const smallTalkResponse = await generateRAGResponse(
+            question,
+            "", // No context for small-talk
+            userRegion,
+            language,
+            model,
+            reasoningEnabled,
+            conversationContext,
+          );
+          return {
+            ...smallTalkResponse,
+            sources: [],
+            debug: {
+              toolInvocations,
+            },
+          };
+        }
+      }
 
-    console.log(`[RAG] ✅ Response generated in ${response.metadata.response_time_ms}ms`);
+      // Step 4: Build context from retrieved documents
+      let context = buildContext(relevantDocs);
 
-    return {
-      ...response,
-      debug: {
-        toolInvocations,
-      },
+      // Step 4.5: Add weather data (if available)
+      console.log(`[RAG] 🌦️ Fetching weather for region: ${userRegion}`);
+      let weather = null;
+      try {
+        weather = await withTimeout(
+          getWeatherData(userRegion),
+          weatherTimeoutMs,
+          "weather",
+        );
+      } catch (error) {
+        console.warn("⚠️ Weather lookup timed out");
+      }
+      if (weather) {
+        toolInvocations.push({
+          toolName: "weather_lookup",
+          state: "output-available",
+          args: {
+            region: userRegion,
+            units: "metric",
+          },
+          result: {
+            region: weather.region,
+            temperature: weather.temperature,
+            feels_like: weather.feels_like,
+            humidity: weather.humidity,
+            description: weather.description,
+            wind_speed: weather.wind_speed,
+            rain_mm: weather.rain_mm ?? 0,
+          },
+        });
+        context += `\n\n[DONNÉES MÉTÉO ACTUELLES]\n${formatWeatherContext(weather)}\n`;
+      }
+
+      // Step 5: Generate answer using Groq (FREE & FAST!)
+      const response = await generateRAGResponse(
+        question,
+        context,
+        userRegion,
+        language,
+        model,
+        reasoningEnabled,
+        conversationContext,
+      );
+
+      // Step 6: Add weather advice if relevant
+      const weatherAdvice = weather ? buildWeatherAdvice(weather) : "";
+      if (weatherAdvice && response.answer) {
+        response.answer += weatherAdvice;
+      }
+
+      console.log(`[RAG] ✅ Response generated in ${response.metadata.response_time_ms}ms`);
+
+      return {
+        ...response,
+        debug: {
+          toolInvocations,
+        },
+      };
     };
+
+    return await withTimeout(pipeline(), pipelineTimeoutMs, "RAG pipeline");
   } catch (error) {
     console.error("[RAG] Pipeline error:", error);
     throw new Error(`RAG pipeline failed: ${error}`);

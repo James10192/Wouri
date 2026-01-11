@@ -29,7 +29,12 @@ export async function getWeatherData(region: string): Promise<WeatherData | null
       region
     )},CI&appid=${config.OPENWEATHER_API_KEY}&units=metric&lang=fr`;
 
-    const response = await fetch(url);
+    const timeoutMs = parseInt(config.WEATHER_TIMEOUT_MS || "3000", 10);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error(`❌ Weather API error for ${region}:`, response.statusText);
@@ -47,7 +52,11 @@ export async function getWeatherData(region: string): Promise<WeatherData | null
       rain_mm: data?.rain?.["1h"] || 0,
       region: data?.name ?? region,
     };
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      console.warn(`⚠️ Weather API timeout for ${region}`);
+      return null;
+    }
     console.error(`❌ Failed to fetch weather for ${region}:`, error);
     return null;
   }
