@@ -6,8 +6,7 @@ import type { User } from "../types";
  * Supabase client singleton
  * FREE TIER: 500MB database, 1GB file storage, 2GB bandwidth
  */
-const SUPABASE_URL =
-  config.SUPABASE_URL_TRANSACTION || config.SUPABASE_URL;
+const SUPABASE_URL = config.SUPABASE_URL;
 
 const fetchWithTimeout: typeof fetch = (url, options = {}) => {
   const controller = new AbortController();
