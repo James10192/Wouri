@@ -71,7 +71,10 @@ export async function generateRAGResponse(
       requestBody.response_format = { type: "json_object" };
     }
 
-    const timeoutMs = parseInt(config.GROQ_TIMEOUT_MS || "30000", 10);
+    const baseTimeoutMs = parseInt(config.GROQ_TIMEOUT_MS || "30000", 10);
+    const timeoutMs = process.env["VERCEL"]
+      ? Math.min(baseTimeoutMs, 20000)
+      : baseTimeoutMs;
     let response: any;
     try {
       response = await withTimeout(

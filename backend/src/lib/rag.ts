@@ -23,10 +23,14 @@ export async function ragPipeline(
   console.log(`[RAG] Processing question for region: ${userRegion}, language: ${language}`);
 
   try {
+    const isVercel = Boolean(process.env["VERCEL"]);
     const embeddingTimeoutMs = parseInt(config.EMBEDDING_TIMEOUT_MS || "8000", 10);
     const searchTimeoutMs = parseInt(config.SEARCH_TIMEOUT_MS || "10000", 10);
     const weatherTimeoutMs = parseInt(config.WEATHER_TIMEOUT_MS || "3000", 10);
     const pipelineTimeoutMs = parseInt(config.RAG_PIPELINE_TIMEOUT_MS || "45000", 10);
+    const cappedPipelineTimeoutMs = isVercel
+      ? Math.min(pipelineTimeoutMs, 25000)
+      : pipelineTimeoutMs;
     const regionFilter = shouldFilterRegion(userRegion)
       ? { region: userRegion }
       : undefined;
@@ -258,7 +262,7 @@ export async function ragPipeline(
       };
     };
 
-    return await withTimeout(pipeline(), pipelineTimeoutMs, "RAG pipeline");
+    return await withTimeout(pipeline(), cappedPipelineTimeoutMs, "RAG pipeline");
   } catch (error) {
     console.error("[RAG] Pipeline error:", error);
     throw new Error(`RAG pipeline failed: ${error}`);
