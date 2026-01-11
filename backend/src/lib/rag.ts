@@ -23,6 +23,9 @@ export async function ragPipeline(
   console.log(`[RAG] Processing question for region: ${userRegion}, language: ${language}`);
 
   try {
+    const isVercel = Boolean(process.env["VERCEL"]);
+    const EMBEDDING_TIMEOUT_MS = isVercel ? 3000 : 10000;
+    const SEARCH_TIMEOUT_MS = isVercel ? 5000 : 15000;
     const regionFilter = shouldFilterRegion(userRegion)
       ? { region: userRegion }
       : undefined;
@@ -45,14 +48,56 @@ export async function ragPipeline(
     const augmentedQuery = conversationContext
       ? `${conversationContext}\n\n${question}`
       : question;
-    const embedding = await getTextEmbedding(augmentedQuery);
+    let embedding: number[];
+    try {
+      embedding = await withTimeout(
+        getTextEmbedding(augmentedQuery, { timeoutMs: EMBEDDING_TIMEOUT_MS }),
+        EMBEDDING_TIMEOUT_MS,
+        "embedding",
+      );
+    } catch (error: any) {
+      console.warn("⚠️ Embedding timeout, falling back to no-context response:", error?.message);
+      const fallback = await generateRAGResponse(
+        question,
+        "",
+        userRegion,
+        language,
+        model,
+        reasoningEnabled,
+        conversationContext,
+      );
+      return {
+        ...fallback,
+        sources: [],
+        debug: {
+          toolInvocations: [
+            {
+              toolName: "vector_search",
+              state: "output-error",
+              args: {
+                query: question,
+                context: conversationContext || undefined,
+                match_threshold: 0.7,
+                match_count: 5,
+                filter: regionFilter || {},
+              },
+              errorText: error?.message || "Embedding timeout",
+            },
+          ],
+        },
+      };
+    }
 
     // Step 2: Search similar documents in Supabase pgvector
-    const similarDocs = await searchSimilarDocuments(
-      embedding,
-      0.7, // Similarity threshold (70%)
-      5, // Top 5 most relevant documents
-      regionFilter, // Filter by user's region when specific
+    const similarDocs = await withTimeout(
+      searchSimilarDocuments(
+        embedding,
+        0.7, // Similarity threshold (70%)
+        5, // Top 5 most relevant documents
+        regionFilter, // Filter by user's region when specific
+      ),
+      SEARCH_TIMEOUT_MS,
+      "vector search",
     );
 
     // Log vector search for Tool visualization (dev only)
@@ -97,10 +142,14 @@ export async function ragPipeline(
 
     // Step 3: Check if we found relevant documents
     if (relevantDocs.length === 0 || invalidSimilarity || topSimilarity < 0.7) {
-      const keywordDocs = await searchDocumentsByKeyword(
-        augmentedQuery,
-        5,
-        regionFilter,
+      const keywordDocs = await withTimeout(
+        searchDocumentsByKeyword(
+          augmentedQuery,
+          5,
+          regionFilter,
+        ),
+        SEARCH_TIMEOUT_MS,
+        "keyword search",
       );
       if (keywordDocs.length > 0) {
         console.log("[RAG] ⚡ Vector search empty, using keyword fallback");
@@ -307,6 +356,23 @@ function shouldFilterRegion(region: string): boolean {
   ]);
 
   return !genericRegions.has(normalized);
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 /**
