@@ -154,7 +154,7 @@ test.get("/supabase", async (c) => {
     const { supabase } = await import("../services/supabase");
 
     // Tester connexion simple
-    const { data, error } = await supabase.from("users").select("count").limit(1);
+    const { data: _data, error } = await supabase.from("users").select("count").limit(1);
 
     if (error) {
       return c.json(
@@ -204,24 +204,27 @@ test.get("/weather", async (c) => {
     const url = `https://api.openweathermap.org/data/2.5/weather?q=${region},CI&appid=${config.OPENWEATHER_API_KEY}&units=metric&lang=fr`;
 
     const response = await fetch(url);
-    const data = await response.json();
+    const data = (await response.json()) as any;
 
     if (!response.ok) {
-      return c.json({
-        success: false,
-        error: data.message || "Weather API error",
-      }, response.status);
+      return c.json(
+        {
+          success: false,
+          error: data?.message || "Weather API error",
+        },
+        response.status as any,
+      );
     }
 
     return c.json({
       success: true,
       region,
       weather: {
-        temperature: data.main.temp,
-        feels_like: data.main.feels_like,
-        humidity: data.main.humidity,
-        description: data.weather[0].description,
-        wind_speed: data.wind.speed,
+        temperature: data?.main?.temp,
+        feels_like: data?.main?.feels_like,
+        humidity: data?.main?.humidity,
+        description: data?.weather?.[0]?.description,
+        wind_speed: data?.wind?.speed,
       },
     });
   } catch (error: any) {
