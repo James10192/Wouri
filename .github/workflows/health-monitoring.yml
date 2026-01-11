@@ -24,10 +24,10 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install dependencies
+      - name: Install backend dependencies
         run: |
           cd backend
-          bun install
+          PRISMA_SKIP_POSTINSTALL=1 bun install
 
       - name: Run health monitoring
         env:
@@ -39,6 +39,8 @@ jobs:
       - name: Run admin API tests
         if: ${{ env.ADMIN_API_KEY != '' && env.API_BASE_URL != '' }}
         run: |
+          export API_BASE_URL="${{ secrets.API_BASE_URL }}"
+          export ADMIN_API_KEY="${{ secrets.ADMIN_API_KEY }}"
           bash scripts/test-admin-endpoints.sh
 
       - name: Notify on failure
