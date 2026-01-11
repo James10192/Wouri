@@ -4,6 +4,8 @@ import {
   type UIMessage,
 } from "ai"
 
+export const runtime = "edge"
+export const preferredRegion = "auto"
 export const maxDuration = 30
 
 type ChatBody = {
@@ -57,7 +59,10 @@ export async function POST(req: Request) {
 
   const response = await fetch(`${backendUrl}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "text/event-stream",
+    },
     body: JSON.stringify({
       question,
       region: body.region,
@@ -157,7 +162,10 @@ async function streamFromBackend(
 
       try {
         const payload = JSON.parse(dataLine)
-        if (event === "message") {
+        if (event === "start") {
+          writer.write({ type: "text-start", id: "text-1" })
+          writer.write({ type: "text-delta", id: "text-1", delta: "" })
+        } else if (event === "message") {
           handleMessage(payload)
         } else if (event === "error") {
           writer.write({ type: "text-start", id: "text-1" })
