@@ -1,4 +1,4 @@
-import { config } from "@/lib/config";
+import { config } from "../lib/config";
 
 const WHATSAPP_API_URL = "https://graph.facebook.com/v21.0";
 

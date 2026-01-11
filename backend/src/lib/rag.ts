@@ -1,12 +1,12 @@
-import { generateRAGResponse } from "@/services/groq";
+import { generateRAGResponse } from "../services/groq";
 import {
   searchSimilarDocuments,
   searchDocumentsByKeyword,
   getTextEmbedding,
-} from "@/services/supabase";
-import { getWeatherData } from "@/services/weather";
-import type { RAGResponse } from "@/types";
-import { config } from "@/lib/config";
+} from "../services/supabase";
+import { getWeatherData } from "../services/weather";
+import type { RAGResponse } from "../types";
+import { config } from "./config";
 
 /**
  * Main RAG Pipeline
@@ -51,7 +51,7 @@ export async function ragPipeline(
 
     // Log vector search for Tool visualization (dev only)
     if (config.NODE_ENV === "development") {
-      const { setLastVectorSearch } = await import("@/routes/debug");
+      const { setLastVectorSearch } = await import("../routes/debug");
       setLastVectorSearch({
         query: question,
         embedding_preview: embedding.slice(0, 5).concat(["...", `(${embedding.length} total)`]),

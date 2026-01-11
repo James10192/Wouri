@@ -6,7 +6,7 @@
  */
 
 import { Hono } from "hono";
-import { adminAuthMiddleware } from "@/middleware/auth";
+import { adminAuthMiddleware } from "../../middleware/auth";
 import conversations from "./conversations";
 import feedback from "./feedback";
 import knowledge from "./knowledge";

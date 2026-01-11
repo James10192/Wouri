@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { config } from "@/lib/config";
-import type { User } from "@/types";
+import { config } from "../lib/config";
+import type { User } from "../types";
 
 /**
  * Supabase client singleton
@@ -186,7 +186,7 @@ export async function searchDocumentsByKeyword(
  */
 export async function getTextEmbedding(text: string): Promise<number[]> {
   // Import production embedding service
-  const { getTextEmbedding: embedFn } = await import("@/services/embeddings");
+  const { getTextEmbedding: embedFn } = await import("./embeddings");
   return embedFn(text);
 }
 

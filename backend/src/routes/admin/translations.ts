@@ -6,8 +6,8 @@
  */
 
 import { Hono } from "hono";
-import { supabase } from "@/services/supabase";
-import { translationCreateSchema, translationsQuerySchema, translationSchema } from "@/types/admin";
+import { supabase } from "../../services/supabase";
+import { translationCreateSchema, translationsQuerySchema, translationSchema } from "../../types/admin";
 
 const translations = new Hono();
 

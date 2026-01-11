@@ -6,11 +6,11 @@
  */
 
 import { Hono } from "hono";
-import { supabase } from "@/services/supabase";
-import { groq } from "@/services/groq";
-import { config } from "@/lib/config";
-import { isEmbeddingServiceHealthy } from "@/services/embeddings";
-import type { ServiceStatus } from "@/types/admin";
+import { supabase } from "../../services/supabase";
+import { groq } from "../../services/groq";
+import { config } from "../../lib/config";
+import { isEmbeddingServiceHealthy } from "../../services/embeddings";
+import type { ServiceStatus } from "../../types/admin";
 
 const monitoring = new Hono();
 

@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from "hono";
-import { config } from "@/lib/config";
+import { config } from "./config";
 
 export const requireAdminKey: MiddlewareHandler = async (c, next) => {
   const configuredKey = config.ADMIN_API_KEY;

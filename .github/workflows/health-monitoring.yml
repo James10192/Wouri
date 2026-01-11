@@ -9,6 +9,11 @@ on:
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    env:
+      ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
     steps:
       - name: Checkout code
@@ -26,14 +31,15 @@ jobs:
 
       - name: Run health monitoring
         env:
-          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           ALERT_THRESHOLD_MS: 5000
           ALERT_ON_SUCCESS: false
         run: |
           bun run scripts/monitor-health.ts
+
+      - name: Run admin API tests
+        if: ${{ env.ADMIN_API_KEY != '' && env.API_BASE_URL != '' }}
+        run: |
+          bash scripts/test-admin-endpoints.sh
 
       - name: Notify on failure
         if: failure()

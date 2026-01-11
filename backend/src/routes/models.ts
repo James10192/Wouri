@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { groq, isReasoningModel } from "@/services/groq";
+import { groq, isReasoningModel } from "../services/groq";
 
 const models = new Hono();
 

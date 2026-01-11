@@ -1,4 +1,4 @@
-import { envSchema, type Env } from "@/types";
+import { envSchema, type Env } from "../types";
 
 /**
  * Load and validate environment variables

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { ragPipeline } from "@/lib/rag";
-import { insertConversationLog } from "@/services/supabase";
-import type { RAGResponse } from "@/types";
+import { ragPipeline } from "../lib/rag";
+import { insertConversationLog } from "../services/supabase";
+import type { RAGResponse } from "../types";
 
 const test = new Hono();
 
@@ -111,7 +111,7 @@ test.post("/chat", async (c) => {
  */
 test.get("/groq", async (c) => {
   try {
-    const { groq, GROQ_MODELS } = await import("@/services/groq");
+    const { groq, GROQ_MODELS } = await import("../services/groq");
 
     const response = await groq.chat.completions.create({
       model: GROQ_MODELS.LLAMA_70B,
@@ -151,7 +151,7 @@ test.get("/groq", async (c) => {
  */
 test.get("/supabase", async (c) => {
   try {
-    const { supabase } = await import("@/services/supabase");
+    const { supabase } = await import("../services/supabase");
 
     // Tester connexion simple
     const { data, error } = await supabase.from("users").select("count").limit(1);
@@ -190,7 +190,7 @@ test.get("/supabase", async (c) => {
 test.get("/weather", async (c) => {
   try {
     const region = c.req.query("region") || "Abidjan";
-    const { config } = await import("@/lib/config");
+    const { config } = await import("../lib/config");
 
     if (!config.OPENWEATHER_API_KEY) {
       return c.json({

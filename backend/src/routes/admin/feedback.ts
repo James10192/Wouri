@@ -6,10 +6,10 @@
  */
 
 import { Hono } from "hono";
-import { supabase } from "@/services/supabase";
-import { getTextEmbedding } from "@/services/embeddings";
-import { formatEmbeddingForPostgres } from "@/services/embeddings";
-import { feedbackCreateSchema, feedbackQuerySchema, feedbackSchema } from "@/types/admin";
+import { supabase } from "../../services/supabase";
+import { getTextEmbedding } from "../../services/embeddings";
+import { formatEmbeddingForPostgres } from "../../services/embeddings";
+import { feedbackCreateSchema, feedbackQuerySchema, feedbackSchema } from "../../types/admin";
 
 const feedback = new Hono();
 

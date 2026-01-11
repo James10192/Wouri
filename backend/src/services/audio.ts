@@ -1,5 +1,5 @@
 import { groq } from "./groq";
-import { config } from "@/lib/config";
+import { config } from "../lib/config";
 
 /**
  * Speech-to-Text (STT) using Groq Whisper

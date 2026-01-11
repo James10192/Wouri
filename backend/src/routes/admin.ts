@@ -1,16 +1,16 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { requireAdminKey } from "@/lib/admin-auth";
+import { requireAdminKey } from "../lib/admin-auth";
 import {
   adminSupabase,
   insertConversationLog,
   searchDocumentsByKeyword,
   searchSimilarDocuments,
   getTextEmbedding,
-} from "@/services/supabase";
-import { groq } from "@/services/groq";
-import { getWeatherData } from "@/services/weather";
-import { isEmbeddingServiceHealthy } from "@/services/embeddings";
+} from "../services/supabase";
+import { groq } from "../services/groq";
+import { getWeatherData } from "../services/weather";
+import { isEmbeddingServiceHealthy } from "../services/embeddings";
 
 const admin = new Hono();
 

@@ -5,7 +5,7 @@
  * @module services/embeddings
  */
 
-import { config } from "@/lib/config";
+import { config } from "../lib/config";
 
 // Supabase Edge Function URL for embeddings
 // Deploy with: supabase functions deploy embed --no-verify-jwt

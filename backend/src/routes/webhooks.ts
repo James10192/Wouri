@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import { config } from "@/lib/config";
-import { verifyWebhookSignature, sendWhatsAppMessage, markMessageAsRead } from "@/services/whatsapp";
-import { getUserByWaId, createUser, checkUserQuota, incrementUserQuota, insertConversationLog } from "@/services/supabase";
-import { ragPipeline, getPaymentReminderMessage } from "@/lib/rag";
-import { SubscriptionExpiredError } from "@/types";
+import { config } from "../lib/config";
+import { verifyWebhookSignature, sendWhatsAppMessage, markMessageAsRead } from "../services/whatsapp";
+import { getUserByWaId, createUser, checkUserQuota, incrementUserQuota, insertConversationLog } from "../services/supabase";
+import { ragPipeline, getPaymentReminderMessage } from "../lib/rag";
+import { SubscriptionExpiredError } from "../types";
 
 const webhooks = new Hono();
 

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { createFeedback } from "@/services/supabase";
+import { createFeedback } from "../services/supabase";
 
 const feedback = new Hono();
 

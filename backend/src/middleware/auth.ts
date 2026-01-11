@@ -6,7 +6,7 @@
  */
 
 import { Context, Next } from "hono";
-import { config } from "@/lib/config";
+import { config } from "../lib/config";
 
 /**
  * Admin API key authentication middleware
@@ -18,7 +18,7 @@ import { config } from "@/lib/config";
  *
  * @example
  * ```typescript
- * import { adminAuthMiddleware } from "@/middleware/auth";
+ * import { adminAuthMiddleware } from "./auth";
  *
  * app.use("/admin/*", adminAuthMiddleware);
  * ```

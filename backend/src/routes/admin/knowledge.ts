@@ -6,9 +6,9 @@
  */
 
 import { Hono } from "hono";
-import { supabase } from "@/services/supabase";
-import { getTextEmbedding, formatEmbeddingForPostgres } from "@/services/embeddings";
-import { knowledgeCreateSchema, knowledgeQuerySchema } from "@/types/admin";
+import { supabase } from "../../services/supabase";
+import { getTextEmbedding, formatEmbeddingForPostgres } from "../../services/embeddings";
+import { knowledgeCreateSchema, knowledgeQuerySchema } from "../../types/admin";
 
 const knowledge = new Hono();
 

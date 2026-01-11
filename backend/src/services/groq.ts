@@ -1,6 +1,6 @@
 import Groq from "groq-sdk";
-import { config } from "@/lib/config";
-import type { RAGResponse } from "@/types";
+import { config } from "../lib/config";
+import type { RAGResponse } from "../types";
 
 /**
  * Groq client (100% FREE API with ultra-fast inference)

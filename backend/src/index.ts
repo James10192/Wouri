@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { cors } from "hono/cors";
-import { config } from "@/lib/config";
-import webhooks from "@/routes/webhooks";
-import test from "@/routes/test";
-import models from "@/routes/models";
-import admin from "@/routes/admin";
+import { config } from "./lib/config";
+import webhooks from "./routes/webhooks";
+import test from "./routes/test";
+import models from "./routes/models";
+import admin from "./routes/admin";
 
 /**
  * Wouri Bot Backend
@@ -65,7 +65,7 @@ app.route("/admin", admin);
 // Test routes (Development only)
 if (config.NODE_ENV === "development") {
   app.route("/test", test);
-  const debug = await import("@/routes/debug");
+  const debug = await import("./routes/debug");
   app.route("/debug", debug.default);
 }
 
