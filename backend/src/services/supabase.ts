@@ -19,6 +19,7 @@ const fetchWithTimeout = (url: string | Request | URL, options: RequestInit = {}
 
   return fetch(url, merged).finally(() => clearTimeout(timeoutId));
 };
+const fetchWithTimeoutTyped = fetchWithTimeout as typeof fetch;
 
 export const supabase: SupabaseClient = createClient(
   SUPABASE_URL,
@@ -28,7 +29,7 @@ export const supabase: SupabaseClient = createClient(
       persistSession: false, // Server-side, no session needed
     },
     global: {
-      fetch: fetchWithTimeout,
+      fetch: fetchWithTimeoutTyped,
     },
   },
 );
@@ -45,7 +46,7 @@ export const adminSupabase: SupabaseClient = createClient(
       persistSession: false,
     },
     global: {
-      fetch: fetchWithTimeout,
+      fetch: fetchWithTimeoutTyped,
     },
   }
 );
