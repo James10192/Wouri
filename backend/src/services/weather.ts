@@ -36,16 +36,16 @@ export async function getWeatherData(region: string): Promise<WeatherData | null
       return null;
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as any;
 
     return {
-      temperature: Math.round(data.main.temp),
-      feels_like: Math.round(data.main.feels_like),
-      humidity: data.main.humidity,
-      description: data.weather[0].description,
-      wind_speed: data.wind.speed,
-      rain_mm: data.rain?.["1h"] || 0,
-      region: data.name,
+      temperature: Math.round(data?.main?.temp ?? 0),
+      feels_like: Math.round(data?.main?.feels_like ?? 0),
+      humidity: data?.main?.humidity ?? 0,
+      description: data?.weather?.[0]?.description ?? "inconnu",
+      wind_speed: data?.wind?.speed ?? 0,
+      rain_mm: data?.rain?.["1h"] || 0,
+      region: data?.name ?? region,
     };
   } catch (error) {
     console.error(`❌ Failed to fetch weather for ${region}:`, error);
