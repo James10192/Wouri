@@ -183,6 +183,8 @@ async function checkHealth() {
       }
     }
 
+    const hasCritical = alerts.some((alert) => alert.severity === "critical");
+
     // Send alerts
     if (alerts.length > 0) {
       console.log(`\n⚠️ Found ${alerts.length} issue(s):`);
@@ -202,7 +204,7 @@ async function checkHealth() {
       }
     }
 
-    return alerts.length === 0;
+    return !hasCritical;
   } catch (error: any) {
     console.error("❌ Failed to check health:", error.message);
 
@@ -228,7 +230,7 @@ async function main() {
   const isHealthy = await checkHealth();
 
   console.log("\n==========================================");
-  console.log(isHealthy ? "✅ Health check completed" : "⚠️ Health check found issues");
+  console.log(isHealthy ? "✅ Health check completed" : "⚠️ Health check found critical issues");
   console.log("==========================================\n");
 
   process.exit(isHealthy ? 0 : 1);
