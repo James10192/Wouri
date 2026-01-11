@@ -34,7 +34,11 @@ app.use(
 );
 
 // Request timeout (buffer before Vercel limit)
-app.use("*", timeout(50000));
+const requestTimeoutMs = Math.max(
+  10000,
+  parseInt(config.VERCEL_FUNCTION_TIMEOUT || "60000", 10) - 5000,
+);
+app.use("*", timeout(requestTimeoutMs));
 
 // ============================================================================
 // Routes

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { ragPipeline } from "../lib/rag";
 import { insertConversationLog } from "../services/supabase";
+import { config } from "../lib/config";
 import type { RAGResponse } from "../types";
 
 const chat = new Hono();
@@ -18,6 +19,7 @@ const chat = new Hono();
  * }
  */
 chat.post("/", async (c) => {
+  const startTime = Date.now();
   try {
     const body = await c.req.json();
     const {
@@ -33,13 +35,18 @@ chat.post("/", async (c) => {
       return c.json({ error: "Question is required" }, 400);
     }
 
-    const response: RAGResponse = await ragPipeline(
-      question,
-      region,
-      language,
-      model,
-      reasoningEnabled,
-      history,
+    const pipelineTimeoutMs = parseInt(config.RAG_PIPELINE_TIMEOUT_MS || "45000", 10);
+    const response: RAGResponse = await withTimeout(
+      ragPipeline(
+        question,
+        region,
+        language,
+        model,
+        reasoningEnabled,
+        history,
+      ),
+      pipelineTimeoutMs,
+      "chat",
     );
 
     const payload = {
@@ -79,14 +86,35 @@ chat.post("/", async (c) => {
     return c.json(payload);
   } catch (error: any) {
     console.error("❌ Chat error:", error);
-    return c.json(
-      {
-        success: false,
-        error: error.message || "Internal server error",
+    return c.json({
+      success: false,
+      answer: "Désolé, cette requête a pris trop de temps. Peux-tu reformuler ou préciser ta question ?",
+      sources: [],
+      metadata: {
+        model: "timeout",
+        tokens_used: 0,
+        response_time_ms: Date.now() - startTime,
       },
-      500,
-    );
+      error: error.message || "Internal server error",
+    });
   }
 });
 
 export default chat;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timeout after ${ms}ms`));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
