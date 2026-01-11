@@ -35,6 +35,12 @@ export async function ragPipeline(
       state?: string;
     }> = [];
 
+    const embeddingPreview = (embedding: number[]) =>
+      embedding
+        .slice(0, 5)
+        .map((value) => value.toFixed(6))
+        .concat(["...", `(${embedding.length} total)`]);
+
     // Step 1: Generate embedding for the question
     const augmentedQuery = conversationContext
       ? `${conversationContext}\n\n${question}`
@@ -54,7 +60,7 @@ export async function ragPipeline(
       const { setLastVectorSearch } = await import("../routes/debug");
       setLastVectorSearch({
         query: question,
-        embedding_preview: embedding.slice(0, 5).concat(["...", `(${embedding.length} total)`]),
+        embedding_preview: embeddingPreview(embedding),
         results: similarDocs.map(d => ({
           id: (d as any).id || "unknown",
           similarity: d.similarity,
@@ -75,7 +81,7 @@ export async function ragPipeline(
         filter: regionFilter || {},
       },
       result: {
-        embedding_preview: embedding.slice(0, 5).concat(["...", `(${embedding.length} total)`]),
+        embedding_preview: embeddingPreview(embedding),
         results: similarDocs.map(d => ({
           id: (d as any).id || "unknown",
           similarity: d.similarity,
@@ -306,33 +312,6 @@ function shouldFilterRegion(region: string): boolean {
 /**
  * Get "no results" message in user's language
  */
-function getNoResultsMessage(language: string): string {
-  const messages: Record<string, string> = {
-    fr: `Je ne trouve pas cette information dans mes sources officielles du Ministère de l'Agriculture.
-
-Je recommande de consulter un agent agricole près de chez vous pour des conseils personnalisés.
-
-📞 ANADER (Agence Nationale d'Appui au Développement Rural)
-   Hotline: +225 27 20 21 59 23`,
-
-    dioula: `Ne tɛ nin kunnafoni sɔrɔ n ka gafew kɔnɔ.
-
-I ka kan ka senekelabaga ɲininka i ka duguw kɔnɔ.
-
-📞 ANADER
-   Telefɔni: +225 27 20 21 59 23`,
-
-    baoulé: `Manfue ti kɔ̀ information yi manfue sources.
-
-N'gbo consulter agent agriculture n'gbo région manfue.
-
-📞 ANADER
-   Téléphone: +225 27 20 21 59 23`,
-  };
-
-  return messages[language] || messages.fr;
-}
-
 /**
  * Get payment reminder message
  */
@@ -373,5 +352,5 @@ Pour continuer:
 👉 Payer maintenant`,
   };
 
-  return messages[language] || messages.fr;
+  return messages[language] || messages["fr"];
 }
