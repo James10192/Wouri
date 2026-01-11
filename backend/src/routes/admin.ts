@@ -19,21 +19,7 @@ admin.use("*", requireAdminKey);
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const EMBEDDING_TIMEOUT_MS = 3000;
-const SHOULD_ASYNC_EMBEDDING = Boolean(process.env["VERCEL"]);
-
-const runEmbeddingTask = (task: () => Promise<void>) => {
-  if (SHOULD_ASYNC_EMBEDDING) {
-    void (async () => {
-      try {
-        await task();
-      } catch (error) {
-        console.error("❌ Background embedding failed:", error);
-      }
-    })();
-    return;
-  }
-  return task();
-};
+const SHOULD_EMBED_SYNC = !process.env["VERCEL"];
 
 const paginationSchema = z.object({
   limit: z.coerce.number().int().positive().max(MAX_LIMIT).optional(),
@@ -394,32 +380,15 @@ admin.post("/etl", async (c) => {
   for (let i = 0; i < documents.length; i++) {
     const doc = documents[i];
     try {
-      if (SHOULD_ASYNC_EMBEDDING) {
-        const { data, error } = await adminSupabase
-          .from("documents")
-          .insert({
-            content: doc.content,
-            metadata: doc.metadata || {},
-          })
-          .select("id")
-          .single();
-
+      if (!SHOULD_EMBED_SYNC) {
+        const { error } = await adminSupabase.from("documents").insert({
+          content: doc.content,
+          metadata: doc.metadata || {},
+        });
         if (error) {
           results.push({ index: i, status: "error", error: error.message });
         } else {
           results.push({ index: i, status: "ok", embedding_pending: true });
-          runEmbeddingTask(async () => {
-            const embedding = await getTextEmbedding(doc.content, {
-              timeoutMs: EMBEDDING_TIMEOUT_MS,
-            });
-            const { error: updateError } = await adminSupabase
-              .from("documents")
-              .update({ embedding })
-              .eq("id", data.id);
-            if (updateError) {
-              throw new Error(updateError.message);
-            }
-          });
         }
         continue;
       }
@@ -526,28 +495,20 @@ admin.post("/feedback", async (c) => {
 
   let embeddingError: string | null = null;
   if (comment && typeof comment === "string") {
-    if (SHOULD_ASYNC_EMBEDDING) {
-      runEmbeddingTask(async () => {
-        const embedding = await getTextEmbedding(comment, {
-          timeoutMs: EMBEDDING_TIMEOUT_MS,
-        });
-        const { error: insertError } = await adminSupabase.from("documents").insert({
-          content: comment,
-          embedding,
-          metadata: {
-            source: "Admin Feedback",
-            conversation_id: conversation_id || null,
-            wa_id,
-            rating: rating ?? null,
-          },
-        });
-
-        if (insertError) {
-          throw new Error(insertError.message);
-        }
-
-        await adminSupabase.from("feedback").update({ is_embedded: true }).eq("id", data.id);
+    if (!SHOULD_EMBED_SYNC) {
+      const { error: insertError } = await adminSupabase.from("documents").insert({
+        content: comment,
+        metadata: {
+          source: "Admin Feedback",
+          conversation_id: conversation_id || null,
+          wa_id,
+          rating: rating ?? null,
+        },
       });
+
+      if (insertError) {
+        embeddingError = insertError.message;
+      }
     } else {
       try {
         const embedding = await getTextEmbedding(comment, {
@@ -579,7 +540,7 @@ admin.post("/feedback", async (c) => {
     {
       data,
       embeddingError,
-      embeddingStatus: SHOULD_ASYNC_EMBEDDING && comment ? "pending" : undefined,
+      embeddingStatus: !SHOULD_EMBED_SYNC && comment ? "pending" : undefined,
     },
     201
   );
@@ -662,7 +623,7 @@ admin.post("/knowledge", async (c) => {
   }
   const { content, metadata } = parsed.data;
 
-  if (SHOULD_ASYNC_EMBEDDING) {
+  if (!SHOULD_EMBED_SYNC) {
     const { data, error } = await adminSupabase
       .from("documents")
       .insert({
@@ -675,19 +636,6 @@ admin.post("/knowledge", async (c) => {
     if (error) {
       return c.json({ error: "Failed to insert knowledge", message: error.message }, 500);
     }
-
-    runEmbeddingTask(async () => {
-      const embedding = await getTextEmbedding(content, {
-        timeoutMs: EMBEDDING_TIMEOUT_MS,
-      });
-      const { error: updateError } = await adminSupabase
-        .from("documents")
-        .update({ embedding })
-        .eq("id", data.id);
-      if (updateError) {
-        throw new Error(updateError.message);
-      }
-    });
 
     return c.json({ data, embeddingStatus: "pending" }, 201);
   }
@@ -859,6 +807,48 @@ admin.get("/monitoring", async (c) => {
   });
 
   return c.json({ data: { services: checks } });
+});
+
+admin.post("/embeddings/process", async (c) => {
+  const parsed = paginationSchema.safeParse({
+    limit: c.req.query("limit"),
+  });
+  if (!parsed.success) {
+    return queryValidationError(c, parsed.error.issues);
+  }
+  const limit = parsed.data.limit ?? 10;
+
+  const { data, error } = await adminSupabase
+    .from("documents")
+    .select("id, content")
+    .is("embedding", null)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    return c.json({ error: "Failed to load pending embeddings", message: error.message }, 500);
+  }
+
+  const results: Array<{ id: string; status: string; error?: string }> = [];
+  for (const doc of data || []) {
+    try {
+      const embedding = await getTextEmbedding(doc.content, {
+        timeoutMs: EMBEDDING_TIMEOUT_MS,
+      });
+      const { error: updateError } = await adminSupabase
+        .from("documents")
+        .update({ embedding })
+        .eq("id", doc.id);
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+      results.push({ id: doc.id, status: "ok" });
+    } catch (error: any) {
+      results.push({ id: doc.id, status: "error", error: error.message });
+    }
+  }
+
+  return c.json({ data: { processed: results.length, results } });
 });
 
 // Optional: expose insert utility for scripts
