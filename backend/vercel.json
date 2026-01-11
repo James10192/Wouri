@@ -1,18 +1,10 @@
 {
-  "version": 2,
-  "buildCommand": "bun run build:vercel",
-  "installCommand": "bun install --production",
-  "outputDirectory": "dist",
-  "builds": [
+  "bunVersion": "1.x",
+  "buildCommand": "prisma generate",
+  "rewrites": [
     {
-      "src": "dist/index.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "dist/index.js"
+      "source": "/(.*)",
+      "destination": "/api"
     }
   ]
 }
