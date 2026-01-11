@@ -138,12 +138,6 @@ const toMessages = (conversation: any) => {
   return result;
 };
 
-function getLimit(value: string | undefined) {
-  const parsed = value ? parseInt(value, 10) : DEFAULT_LIMIT;
-  if (Number.isNaN(parsed) || parsed <= 0) return DEFAULT_LIMIT;
-  return Math.min(parsed, MAX_LIMIT);
-}
-
 admin.get("/conversations", async (c) => {
   const parsed = paginationSchema.safeParse({
     limit: c.req.query("limit"),
