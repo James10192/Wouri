@@ -33,12 +33,17 @@ app.use(
   }),
 );
 
-// Request timeout (buffer before Vercel limit)
+// Request timeout (buffer before Vercel limit), skip chat which has its own fallback
 const requestTimeoutMs = Math.max(
   10000,
   parseInt(config.VERCEL_FUNCTION_TIMEOUT || "60000", 10) - 5000,
 );
-app.use("*", timeout(requestTimeoutMs));
+app.use("*", async (c, next) => {
+  if (c.req.path.startsWith("/chat")) {
+    return next();
+  }
+  return timeout(requestTimeoutMs)(c, next);
+});
 
 // ============================================================================
 // Routes
