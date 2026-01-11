@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { cors } from "hono/cors";
+import { timeout } from "hono/timeout";
 import { config } from "./lib/config";
 import webhooks from "./routes/webhooks";
 import test from "./routes/test";
@@ -31,6 +32,9 @@ app.use(
     allowHeaders: ["Content-Type", "Authorization", "x-hub-signature-256"],
   }),
 );
+
+// Request timeout (buffer before Vercel limit)
+app.use("*", timeout(50000));
 
 // ============================================================================
 // Routes
