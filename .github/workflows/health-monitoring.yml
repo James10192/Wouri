@@ -27,7 +27,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           cd backend
-          PRISMA_SKIP_POSTINSTALL=1 bun install
+          bun install --ignore-scripts
 
       - name: Run health monitoring
         env:
