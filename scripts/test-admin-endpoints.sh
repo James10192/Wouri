@@ -5,9 +5,21 @@
 
 set -e
 
-# Use environment variables from GitHub Actions workflow, fallback to defaults for local testing
-API_BASE_URL="${API_BASE_URL:-http://localhost:4456}"
-ADMIN_API_KEY="${ADMIN_API_KEY:-9ddab39eb66f38a312c79e4e24aa2beaf0ba331ca7109346695e6cfd89fd99d1}"
+# Check if required environment variables are set
+if [ -z "$API_BASE_URL" ]; then
+    echo "❌ ERROR: API_BASE_URL environment variable is not set"
+    echo "Please set it to your backend URL (e.g., https://wouri-ashen.vercel.app)"
+    exit 1
+fi
+
+if [ -z "$ADMIN_API_KEY" ]; then
+    echo "❌ ERROR: ADMIN_API_KEY environment variable is not set"
+    echo "Please set your admin API key in GitHub Secrets or environment"
+    exit 1
+fi
+
+echo "🌐 Testing backend at: $API_BASE_URL"
+echo ""
 
 echo "=========================================="
 echo "🧪 WOURI BOT - ADMIN API TESTS"

@@ -4,6 +4,44 @@ Scripts pour collecter et importer des documents agricoles dans la base vectorie
 
 ---
 
+## ⚙️ Configuration (IMPORTANT!)
+
+**Avant d'exécuter les scripts**, configurez les variables d'environnement :
+
+### Option 1 : Fichier .env (Recommandé pour tests locaux)
+
+```bash
+# 1. Copier le template
+cp scripts/.env.example scripts/.env
+
+# 2. Éditer avec vos valeurs
+nano scripts/.env
+
+# 3. Charger les variables
+export $(cat scripts/.env | xargs)
+
+# 4. Exécuter un script
+bash scripts/test-admin-endpoints.sh
+```
+
+### Option 2 : Variables inline
+
+```bash
+API_BASE_URL=https://wouri-ashen.vercel.app \
+ADMIN_API_KEY=your_admin_key \
+bash scripts/test-admin-endpoints.sh
+```
+
+### Option 3 : GitHub Actions (Production)
+
+Les variables sont automatiquement chargées depuis GitHub Secrets :
+- `API_BASE_URL` → URL de votre backend Vercel
+- `ADMIN_API_KEY` → Clé admin API
+- `SLACK_WEBHOOK_URL` (optionnel)
+- `DISCORD_WEBHOOK_URL` (optionnel)
+
+---
+
 ## 📋 Scripts Disponibles
 
 ### 1. ETL Pipeline (Collecte Automatisée)
