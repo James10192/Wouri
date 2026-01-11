@@ -3,8 +3,13 @@
  * For use in scripts and external tools
  */
 
-const API_BASE_URL = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "https://wouribot-backend.onrender.com";
+// API_BASE_URL is REQUIRED - no fallback to prevent accidental wrong endpoint usage
+const API_BASE_URL = process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL;
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || process.env.NEXT_PUBLIC_ADMIN_API_KEY;
+
+if (!API_BASE_URL) {
+  throw new Error("API_BASE_URL is not defined in environment variables. Set it to your backend URL (e.g., https://wouri-ashen.vercel.app)");
+}
 
 export class AdminApiError extends Error {
   constructor(
