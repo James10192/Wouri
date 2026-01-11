@@ -38,10 +38,10 @@ model User {
 model Document {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   content   String   @db.Text
-  // pgvector field (768 dimensions for sentence-transformers)
+  // pgvector field (384 dimensions for all-MiniLM-L6-v2)
   // Note: Prisma doesn't natively support vector type, so we use Unsupported
   // or handle via raw SQL queries
-  embedding String?  // Sera géré via raw SQL avec le type vector(768)
+  embedding String?  // Sera géré via raw SQL avec le type vector(384)
   metadata  Json?    @db.JsonB
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -83,7 +83,7 @@ model Feedback {
   waId           String        @map("wa_id")
   rating         Int?          // 1-5 stars
   comment        String?       @db.Text
-  embedding      String?       // VECTOR(768) - managed via raw SQL
+  embedding      String?       // VECTOR(384) - managed via raw SQL
   isEmbedded     Boolean       @default(false) @map("is_embedded")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @default(now()) @updatedAt @map("updated_at")
@@ -124,7 +124,7 @@ model Translation {
 // Solutions:
 // 1. Utiliser des migrations SQL brutes pour créer la colonne avec le type VECTOR
 // 2. Utiliser Prisma.$executeRaw pour les requêtes vectorielles
-// 3. Le schéma Prisma définit `embedding` comme String?, mais en DB ce sera VECTOR(768)
+// 3. Le schéma Prisma définit `embedding` comme String?, mais en DB ce sera VECTOR(384)
 
 // Exemple de migration SQL (créée manuellement):
 // ```sql
@@ -133,7 +133,7 @@ model Translation {
 //
 // -- Alter documents table to add vector column
 // ALTER TABLE documents
-// ADD COLUMN embedding vector(768);
+// ADD COLUMN embedding vector(384);
 //
 // -- Create HNSW index for fast vector search
 // CREATE INDEX documents_embedding_idx
@@ -141,7 +141,7 @@ model Translation {
 //
 // -- Vector search function (appelée via Prisma.$queryRaw)
 // CREATE OR REPLACE FUNCTION match_documents(
-//   query_embedding vector(768),
+//   query_embedding vector(384),
 //   match_threshold float DEFAULT 0.7,
 //   match_count int DEFAULT 5,
 //   filter jsonb DEFAULT '{}'::jsonb

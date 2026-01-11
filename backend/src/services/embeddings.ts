@@ -13,16 +13,16 @@ const EMBEDDING_FUNCTION_URL = `${config.SUPABASE_URL}/functions/v1/embed`;
 
 /**
  * Generate text embedding using Supabase Edge Function
- * Uses all-MiniLM-L6-v2 model (768 dimensions)
+ * Uses all-MiniLM-L6-v2 model (384 dimensions)
  *
  * @param text - Text to embed
- * @returns 768-dimensional embedding vector
+ * @returns 384-dimensional embedding vector
  * @throws Error if embedding generation fails
  *
  * @example
  * ```typescript
  * const embedding = await getTextEmbedding("Le maïs nécessite un sol bien drainé");
- * console.log(embedding.length); // 768
+ * console.log(embedding.length); // 384
  * ```
  */
 export async function getTextEmbedding(text: string): Promise<number[]> {
@@ -51,9 +51,9 @@ export async function getTextEmbedding(text: string): Promise<number[]> {
       throw new Error("Invalid embedding response format");
     }
 
-    // Validate embedding dimension (should be 768 for all-MiniLM-L6-v2)
-    if (data.embedding.length !== 768) {
-      throw new Error(`Invalid embedding dimension: expected 768, got ${data.embedding.length}`);
+    // Validate embedding dimension (should be 384 for all-MiniLM-L6-v2)
+    if (data.embedding.length !== 384) {
+      throw new Error(`Invalid embedding dimension: expected 384, got ${data.embedding.length}`);
     }
 
     return data.embedding as number[];
@@ -77,7 +77,7 @@ export async function getTextEmbedding(text: string): Promise<number[]> {
  *
  * @param texts - Array of texts to embed
  * @param batchSize - Number of texts to process per batch (default: 10)
- * @returns Array of 768-dimensional embedding vectors
+ * @returns Array of 384-dimensional embedding vectors
  *
  * @example
  * ```typescript
@@ -121,7 +121,7 @@ export async function batchEmbeddings(
 export async function isEmbeddingServiceHealthy(): Promise<boolean> {
   try {
     const testEmbedding = await getTextEmbedding("test");
-    return testEmbedding.length === 768;
+    return testEmbedding.length === 384;
   } catch (error) {
     console.error("[Embeddings] Health check failed:", error);
     return false;
