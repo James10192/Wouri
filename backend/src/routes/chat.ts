@@ -9,7 +9,7 @@ const chat = new Hono();
 /**
  * GET /chat/ping - SSE ping to verify streaming
  */
-chat.get("/ping", (c) => {
+chat.get("/ping", () => {
   const stream = new ReadableStream({
     start(controller) {
       const encoder = new TextEncoder();
