@@ -7,6 +7,29 @@ import type { RAGResponse } from "../types";
 const chat = new Hono();
 
 /**
+ * GET /chat/ping - SSE ping to verify streaming
+ */
+chat.get("/ping", (c) => {
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder();
+      controller.enqueue(
+        encoder.encode(`event: message\n` + `data: ${JSON.stringify({ status: "pong" })}\n\n`)
+      );
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
+});
+
+/**
  * POST /chat - Production RAG endpoint (streamed SSE)
  */
 chat.post("/", async (c) => {
@@ -19,10 +42,34 @@ chat.post("/", async (c) => {
       model,
       reasoningEnabled = false,
       history = [],
+      fast = false,
     } = body;
 
     if (!question) {
       return c.json({ error: "Question is required" }, 400);
+    }
+
+    if (fast) {
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+          controller.enqueue(
+            encoder.encode(
+              `event: message\n` +
+                `data: ${JSON.stringify({ answer: "Réponse rapide activée.", fast: true })}\n\n`
+            )
+          );
+          controller.close();
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
     }
 
     const pipelineTimeoutMs = parseInt(config.RAG_PIPELINE_TIMEOUT_MS || "45000", 10);

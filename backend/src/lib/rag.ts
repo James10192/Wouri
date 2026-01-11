@@ -53,14 +53,17 @@ export async function ragPipeline(
     const augmentedQuery = conversationContext
       ? `${conversationContext}\n\n${question}`
       : question;
+    const pipelineStart = Date.now();
     const pipeline = async () => {
       let embedding: number[];
       try {
+        const embeddingStart = Date.now();
         embedding = await withTimeout(
           getTextEmbedding(augmentedQuery, { timeoutMs: embeddingTimeoutMs }),
           embeddingTimeoutMs,
           "embedding",
         );
+        console.log(`[RAG] Embedding took ${Date.now() - embeddingStart}ms`);
       } catch (error: any) {
         console.warn("⚠️ Embedding timeout, falling back to no-context response:", error?.message);
         const fallback = await generateRAGResponse(
@@ -95,6 +98,7 @@ export async function ragPipeline(
       }
 
       // Step 2: Search similar documents in Supabase pgvector
+      const vectorStart = Date.now();
       const similarDocs = await withTimeout(
         searchSimilarDocuments(
           embedding,
@@ -105,6 +109,7 @@ export async function ragPipeline(
         searchTimeoutMs,
         "vector search",
       );
+      console.log(`[RAG] Vector search took ${Date.now() - vectorStart}ms`);
       // Log vector search for Tool visualization (dev only)
       if (config.NODE_ENV === "development") {
         const { setLastVectorSearch } = await import("../routes/debug");
@@ -147,6 +152,7 @@ export async function ragPipeline(
 
       // Step 3: Check if we found relevant documents
       if (relevantDocs.length === 0 || invalidSimilarity || topSimilarity < 0.7) {
+        const keywordStart = Date.now();
         const keywordDocs = await withTimeout(
           searchDocumentsByKeyword(
             augmentedQuery,
@@ -156,6 +162,7 @@ export async function ragPipeline(
           searchTimeoutMs,
           "keyword search",
         );
+        console.log(`[RAG] Keyword search took ${Date.now() - keywordStart}ms`);
         if (keywordDocs.length > 0) {
           console.log("[RAG] ⚡ Vector search empty, using keyword fallback");
           relevantDocs = keywordDocs;
@@ -206,11 +213,13 @@ export async function ragPipeline(
       console.log(`[RAG] 🌦️ Fetching weather for region: ${userRegion}`);
       let weather = null;
       try {
+        const weatherStart = Date.now();
         weather = await withTimeout(
           getWeatherData(userRegion),
           weatherTimeoutMs,
           "weather",
         );
+        console.log(`[RAG] Weather lookup took ${Date.now() - weatherStart}ms`);
       } catch (error) {
         console.warn("⚠️ Weather lookup timed out");
       }
@@ -236,6 +245,7 @@ export async function ragPipeline(
       }
 
       // Step 5: Generate answer using Groq (FREE & FAST!)
+      const llmStart = Date.now();
       const response = await generateRAGResponse(
         question,
         context,
@@ -245,6 +255,7 @@ export async function ragPipeline(
         reasoningEnabled,
         conversationContext,
       );
+      console.log(`[RAG] LLM response took ${Date.now() - llmStart}ms`);
 
       // Step 6: Add weather advice if relevant
       const weatherAdvice = weather ? buildWeatherAdvice(weather) : "";
@@ -253,6 +264,7 @@ export async function ragPipeline(
       }
 
       console.log(`[RAG] ✅ Response generated in ${response.metadata.response_time_ms}ms`);
+      console.log(`[RAG] Pipeline total ${Date.now() - pipelineStart}ms`);
 
       return {
         ...response,
