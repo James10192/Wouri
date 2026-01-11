@@ -19,7 +19,7 @@ admin.use("*", requireAdminKey);
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const EMBEDDING_TIMEOUT_MS = 3000;
-const SHOULD_ASYNC_EMBEDDING = Boolean(process.env.VERCEL);
+const SHOULD_ASYNC_EMBEDDING = Boolean(process.env["VERCEL"]);
 
 const runEmbeddingTask = (task: () => Promise<void>) => {
   if (SHOULD_ASYNC_EMBEDDING) {
@@ -380,7 +380,7 @@ admin.post("/etl", async (c) => {
   }
 
   const { documents, dry_run } = parsed.data;
-  const results: Array<{ index: number; status: string; error?: string }> = [];
+  const results: Array<{ index: number; status: string; error?: string; embedding_pending?: boolean }> = [];
 
   if (dry_run) {
     return c.json({
