@@ -151,26 +151,212 @@ NEXT_PUBLIC_API_URL=http://localhost:8000
 
 ## 📚 API Endpoints
 
-### GET `/`
+### Public Endpoints
+
+#### GET `/`
 Informations API
 
-### GET `/health`
+#### GET `/health`
 Health check (monitoring)
 
-### GET `/webhooks/whatsapp`
+#### GET `/webhooks/whatsapp`
 Verification webhook Meta
 
-### POST `/webhooks/whatsapp`
+#### POST `/webhooks/whatsapp`
 Recevoir messages WhatsApp
 
-### POST `/webhooks/fedapay`
+#### POST `/webhooks/fedapay`
 Notifications paiement FedaPay
 
-### POST `/test/chat`
+#### POST `/test/chat`
 Test RAG pipeline (body: `{ question, region, language }`)
 
-### GET `/test/groq`
+#### GET `/test/groq`
 Test Groq API
+
+---
+
+## 🔐 Admin Dashboard API
+
+L'API Admin permet de gérer le bot, visualiser les conversations, et améliorer la base de connaissances via un dashboard.
+
+### Authentication
+
+Tous les endpoints `/admin/*` sont protégés par API key:
+
+```bash
+curl -X GET https://your-backend.com/admin/conversations \
+  -H "x-admin-key: your_admin_api_key"
+```
+
+**Configuration**:
+
+1. Générer une clé sécurisée:
+```bash
+openssl rand -hex 32
+```
+
+2. Ajouter dans `.env`:
+```bash
+ADMIN_API_KEY=votre_cle_de_32_caracteres_minimum
+```
+
+3. Redémarrer le backend pour charger la nouvelle clé
+
+### Endpoints Admin
+
+#### **Conversations & Messages**
+
+```bash
+# Liste des conversations (pagination cursor-based)
+GET /admin/conversations?limit=50&cursor=2026-01-10T10:30:00Z
+
+# Détails d'une conversation avec feedback
+GET /admin/conversations/:id
+
+# Messages formatés pour UI
+GET /admin/messages?limit=50&language=fr&region=Bouaké
+
+# Stream temps réel (SSE)
+GET /admin/messages/stream?since=2026-01-10T00:00:00Z
+```
+
+**Format réponse**:
+```json
+{
+  "data": [...],
+  "nextCursor": "2026-01-10T10:30:00Z",
+  "hasMore": true
+}
+```
+
+#### **Feedback (RAG Improvement Loop)**
+
+```bash
+# Soumettre feedback (auto-embedding dans vector DB)
+POST /admin/feedback
+{
+  "conversation_id": "uuid",  // optionnel
+  "wa_id": "1234567890",
+  "rating": 5,
+  "comment": "Réponse correcte et claire"
+}
+
+# Lister feedback
+GET /admin/feedback?min_rating=4&limit=50
+```
+
+**Workflow**:
+1. L'admin évalue une réponse du bot
+2. Le feedback est automatiquement embedded dans la base vectorielle
+3. Le RAG utilise ces feedbacks pour améliorer les futures réponses
+
+#### **Knowledge Base**
+
+```bash
+# Ajouter un document (avec embedding automatique)
+POST /admin/knowledge
+{
+  "content": "Le maïs se plante en avril-mai...",
+  "metadata": {
+    "source": "MinAgri CI",
+    "region": "Bouaké",
+    "category": "plantation",
+    "crop": "maïs"
+  }
+}
+
+# Recherche vectorielle
+GET /admin/knowledge?query=plantation maïs&region=Bouaké&limit=10
+
+# Batch ingestion (ETL)
+POST /admin/etl
+{
+  "documents": [
+    { "content": "...", "metadata": {...} },
+    { "content": "...", "metadata": {...} }
+  ],
+  "dry_run": false  // true pour validation uniquement
+}
+```
+
+#### **Translations (Multilingual)**
+
+```bash
+# Ajouter traduction
+POST /admin/translations
+{
+  "source_text": "Quand planter le maïs?",
+  "source_language": "fr",
+  "target_language": "dioula",
+  "translated_text": "Den tulu ka maïs bɔ?",
+  "context": "agriculture",
+  "verified": true
+}
+
+# Rechercher traductions
+GET /admin/translations?query=maïs&source_language=fr&target_language=dioula
+```
+
+#### **Monitoring**
+
+```bash
+# Health checks de tous les services
+GET /admin/monitoring
+
+# Réponse:
+{
+  "data": {
+    "services": {
+      "supabase": { "status": "ok", "latency_ms": 120 },
+      "groq": { "status": "ok", "latency_ms": 450 },
+      "openweather": { "status": "ok", "latency_ms": 230 },
+      "embeddings": { "status": "error", "latency_ms": 0 }
+    }
+  }
+}
+```
+
+### Scripts Admin
+
+#### **Test tous les endpoints**
+```bash
+bash scripts/test-admin-endpoints.sh
+```
+
+#### **Monitoring automatique (avec alertes Slack/Discord)**
+```bash
+# Configuration
+export SLACK_WEBHOOK_URL=https://hooks.slack.com/services/xxx
+export DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/xxx
+export ALERT_THRESHOLD_MS=5000
+
+# Exécuter
+bun run scripts/monitor-health.ts
+```
+
+#### **Seed données de test**
+```bash
+bun run scripts/seed-admin.ts
+```
+
+### GitHub Actions - Monitoring Automatique
+
+Le fichier `.github/workflows/health-monitoring.yml` exécute le monitoring toutes les 15 minutes.
+
+**Secrets à configurer** (GitHub → Settings → Secrets):
+- `ADMIN_API_KEY`
+- `API_BASE_URL` (ex: https://wouribot-backend.onrender.com)
+- `SLACK_WEBHOOK_URL` (optionnel)
+- `DISCORD_WEBHOOK_URL` (optionnel)
+
+### Documentation complète
+
+Voir `docs/api/` pour la documentation complète:
+- **Endpoints**: `docs/api/endpoints/`
+- **Schemas**: `docs/api/schemas/`
+- **Exemples**: `docs/api/examples/` (TypeScript, React hooks, curl)
+- **Guides**: `docs/api/guides/` (embeddings, frontend integration, monitoring)
 
 ---
 
