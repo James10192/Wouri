@@ -17,6 +17,20 @@ export const supabase: SupabaseClient = createClient(
 );
 
 /**
+ * Admin Supabase client (service role)
+ * Use for server-side admin operations only.
+ */
+export const adminSupabase: SupabaseClient = createClient(
+  config.SUPABASE_URL,
+  config.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      persistSession: false,
+    },
+  }
+);
+
+/**
  * Get user by WhatsApp ID
  */
 export async function getUserByWaId(wa_id: string): Promise<User | null> {
@@ -174,4 +188,36 @@ export async function getTextEmbedding(text: string): Promise<number[]> {
   // Import production embedding service
   const { getTextEmbedding: embedFn } = await import("@/services/embeddings");
   return embedFn(text);
+}
+
+export type ConversationLog = {
+  wa_id: string;
+  message_id: string;
+  message_type: string;
+  user_message: string;
+  bot_response?: string | null;
+  language?: string;
+  region?: string | null;
+  model_used?: string | null;
+  tokens_used?: number | null;
+  response_time_ms?: number | null;
+};
+
+export async function insertConversationLog(log: ConversationLog): Promise<void> {
+  const { error } = await adminSupabase.from("conversations").insert({
+    wa_id: log.wa_id,
+    message_id: log.message_id,
+    message_type: log.message_type,
+    user_message: log.user_message,
+    bot_response: log.bot_response ?? null,
+    language: log.language || "fr",
+    region: log.region ?? null,
+    model_used: log.model_used ?? null,
+    tokens_used: log.tokens_used ?? null,
+    response_time_ms: log.response_time_ms ?? null,
+  });
+
+  if (error) {
+    throw new Error(`Failed to insert conversation log: ${error.message}`);
+  }
 }

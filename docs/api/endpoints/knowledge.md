@@ -46,17 +46,18 @@ Content-Type: application/json
 **Success (201 Created)**:
 ```json
 {
-  "id": "990e8400-e29b-41d4-a716-446655440000",
-  "content": "Le manioc nécessite un sol bien drainé...",
-  "embedding": "[0.123, 0.456, 0.789, ...]",
-  "metadata": {
-    "source": "Ministère de l'Agriculture - Guide Manioc 2025",
-    "page": 15,
-    "region": "Bouaké",
-    "category": "plantation",
-    "crop": "manioc"
-  },
-  "created_at": "2026-01-10T14:00:00Z"
+  "data": {
+    "id": "990e8400-e29b-41d4-a716-446655440000",
+    "content": "Le manioc nécessite un sol bien drainé...",
+    "metadata": {
+      "source": "Ministère de l'Agriculture - Guide Manioc 2025",
+      "page": 15,
+      "region": "Bouaké",
+      "category": "plantation",
+      "crop": "manioc"
+    },
+    "created_at": "2026-01-10T14:00:00Z"
+  }
 }
 ```
 
@@ -130,16 +131,16 @@ Content-Type: application/json
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `query` | string | Yes | - | Search query |
-| `region` | string | No | - | Filter by region |
-| `limit` | integer | No | 10 | Number of results (max: 50) |
+| `query` | string | No | - | Search query |
+| `limit` | integer | No | 10 | Number of results (max: 200) |
+| `cursor` | ISO datetime | No | - | Pagination cursor |
 
 ### Response
 
 **Success (200 OK)**:
 ```json
 {
-  "results": [
+  "data": [
     {
       "id": "990e8400-e29b-41d4-a716-446655440000",
       "content": "Le manioc nécessite un sol bien drainé et une température entre 25-29°C...",
@@ -164,7 +165,9 @@ Content-Type: application/json
         "crop": "manioc"
       }
     }
-  ]
+  ],
+  "nextCursor": null,
+  "hasMore": false
 }
 ```
 
@@ -190,7 +193,7 @@ Content-Type: application/json
 ```typescript
 const results = await adminFetch('/admin/knowledge?query=plantation manioc&limit=5');
 
-results.results.forEach(doc => {
+results.data.forEach(doc => {
   console.log(`Similarity: ${doc.similarity.toFixed(2)}`);
   console.log(`Content: ${doc.content.substring(0, 100)}...`);
 });
@@ -270,9 +273,9 @@ const searchResults = await adminFetch(
   `/admin/knowledge?query=manioc&limit=1`
 );
 
-if (searchResults.results[0]?.id === newDoc.id) {
+if (searchResults.data[0]?.id === newDoc.data.id) {
   console.log('✅ Document successfully indexed!');
-  console.log(`Similarity: ${searchResults.results[0].similarity}`);
+  console.log(`Similarity: ${searchResults.data[0].similarity}`);
 }
 ```
 
@@ -285,7 +288,7 @@ const targetDoc = await adminFetch(
 );
 
 // Filter out the original document
-const similar = targetDoc.results.filter(r => r.id !== existingDocument.id);
+const similar = targetDoc.data.filter(r => r.id !== existingDocument.id);
 
 console.log('Similar documents:');
 similar.forEach(doc => {
@@ -300,7 +303,7 @@ similar.forEach(doc => {
 const results = await adminFetch('/admin/knowledge?query=plantation maïs Bouaké&limit=10');
 
 // Check if we have enough good results
-const highQuality = results.results.filter(r => r.similarity > 0.8);
+const highQuality = results.data.filter(r => r.similarity > 0.8);
 
 if (highQuality.length < 3) {
   console.warn('⚠️ Low coverage for "plantation maïs Bouaké"');
@@ -358,3 +361,57 @@ Le manioc
 
 - [Feedback](./feedback.md) - Alternative way to add knowledge via feedback
 - [Translations](./translations.md) - Multilingual content management
+
+---
+
+## POST `/admin/etl`
+
+Batch ingest documents with automatic embeddings.
+
+### Request
+
+**Headers**:
+```http
+x-admin-key: your-admin-api-key
+Content-Type: application/json
+```
+
+**Body**:
+```json
+{
+  "documents": [
+    {
+      "content": "Titre\n\nContenu du document...",
+      "metadata": {
+        "source": "ETL",
+        "region": "Bouaké",
+        "category": "plantation",
+        "language": "fr"
+      }
+    }
+  ]
+}
+```
+
+**Fields**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `documents` | array | Yes | List of documents to ingest (max: 200) |
+| `documents[].content` | string | Yes | Document text |
+| `documents[].metadata` | object | No | Metadata payload |
+| `dry_run` | boolean | No | Validate only, no insert |
+
+### Response
+
+**Success (200 OK)**:
+```json
+{
+  "data": {
+    "count": 1,
+    "results": [
+      { "index": 0, "status": "ok" }
+    ]
+  }
+}
+```

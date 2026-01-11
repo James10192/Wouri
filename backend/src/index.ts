@@ -5,6 +5,7 @@ import { config } from "@/lib/config";
 import webhooks from "@/routes/webhooks";
 import test from "@/routes/test";
 import models from "@/routes/models";
+import admin from "@/routes/admin";
 
 /**
  * Wouri Bot Backend
@@ -58,9 +59,8 @@ app.route("/webhooks", webhooks);
 // Models endpoint
 app.route("/models", models);
 
-// Admin dashboard API (protected with API key)
-const admin = await import("@/routes/admin");
-app.route("/admin", admin.default);
+// Admin API
+app.route("/admin", admin);
 
 // Test routes (Development only)
 if (config.NODE_ENV === "development") {

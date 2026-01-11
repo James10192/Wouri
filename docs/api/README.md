@@ -98,9 +98,11 @@ curl -X GET https://wouribot-backend.onrender.com/admin/conversations \
 | `/admin/feedback` | GET | List all feedback entries |
 | `/admin/knowledge` | POST | Add document to vector DB |
 | `/admin/knowledge` | GET | Search knowledge base |
+| `/admin/etl` | POST | Batch ingest documents (ETL) |
 | `/admin/translations` | POST | Add translation entry |
 | `/admin/translations` | GET | Query translations |
 | `/admin/monitoring` | GET | Service health checks |
+| `/admin/messages/stream` | GET | SSE stream of messages |
 
 ---
 

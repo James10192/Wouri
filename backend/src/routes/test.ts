@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { ragPipeline } from "@/lib/rag";
+import { insertConversationLog } from "@/services/supabase";
 import type { RAGResponse } from "@/types";
 
 const test = new Hono();
@@ -57,7 +58,7 @@ test.post("/chat", async (c) => {
       history,
     );
 
-    return c.json({
+    const payload = {
       success: true,
       question,
       region,
@@ -72,7 +73,26 @@ test.post("/chat", async (c) => {
         outputTokens: Math.floor((response.metadata?.tokens_used || 0) * 0.4),
         reasoningTokens: response.reasoning ? 50 : 0,
       },
-    });
+    };
+
+    try {
+      await insertConversationLog({
+        wa_id: "test-user",
+        message_id: `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        message_type: "text",
+        user_message: question,
+        bot_response: response.answer,
+        language,
+        region,
+        model_used: response.metadata?.model,
+        tokens_used: response.metadata?.tokens_used,
+        response_time_ms: response.metadata?.response_time_ms,
+      });
+    } catch (error) {
+      console.warn("⚠️ Failed to store test conversation:", error);
+    }
+
+    return c.json(payload);
   } catch (error: any) {
     console.error("❌ Test chat error:", error);
     return c.json(

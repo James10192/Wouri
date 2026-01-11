@@ -23,31 +23,24 @@ Content-Type: application/json
 **Success (200 OK)**:
 ```json
 {
-  "services": {
-    "backend": {
-      "status": "healthy",
-      "latency_ms": 0,
-      "last_checked": "2026-01-10T15:30:00Z"
-    },
-    "supabase": {
-      "status": "healthy",
-      "latency_ms": 45,
-      "last_checked": "2026-01-10T15:30:00Z"
-    },
-    "groq": {
-      "status": "healthy",
-      "latency_ms": 120,
-      "last_checked": "2026-01-10T15:30:00Z"
-    },
-    "openweather": {
-      "status": "healthy",
-      "latency_ms": 230,
-      "last_checked": "2026-01-10T15:30:00Z"
-    },
-    "embeddings": {
-      "status": "healthy",
-      "latency_ms": 85,
-      "last_checked": "2026-01-10T15:30:00Z"
+  "data": {
+    "services": {
+      "supabase": {
+        "status": "ok",
+        "latency_ms": 45
+      },
+      "groq": {
+        "status": "ok",
+        "latency_ms": 120
+      },
+      "openweather": {
+        "status": "ok",
+        "latency_ms": 230
+      },
+      "embeddings": {
+        "status": "ok",
+        "latency_ms": 85
+      }
     }
   }
 }
@@ -56,33 +49,24 @@ Content-Type: application/json
 **Partial Failure (200 OK with errors)**:
 ```json
 {
-  "services": {
-    "backend": {
-      "status": "healthy",
-      "latency_ms": 0,
-      "last_checked": "2026-01-10T15:30:00Z"
-    },
-    "supabase": {
-      "status": "healthy",
-      "latency_ms": 45,
-      "last_checked": "2026-01-10T15:30:00Z"
-    },
-    "groq": {
-      "status": "unhealthy",
-      "latency_ms": 0,
-      "last_checked": "2026-01-10T15:30:00Z",
-      "error_message": "API key invalid or rate limit exceeded"
-    },
-    "openweather": {
-      "status": "healthy",
-      "latency_ms": 230,
-      "last_checked": "2026-01-10T15:30:00Z"
-    },
-    "embeddings": {
-      "status": "unhealthy",
-      "latency_ms": 0,
-      "last_checked": "2026-01-10T15:30:00Z",
-      "error_message": "Supabase Edge Function timeout"
+  "data": {
+    "services": {
+      "supabase": {
+        "status": "ok",
+        "latency_ms": 45
+      },
+      "groq": {
+        "status": "error",
+        "latency_ms": 0
+      },
+      "openweather": {
+        "status": "ok",
+        "latency_ms": 230
+      },
+      "embeddings": {
+        "status": "error",
+        "latency_ms": 0
+      }
     }
   }
 }
@@ -92,10 +76,8 @@ Content-Type: application/json
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `status` | enum | healthy, degraded, unhealthy |
+| `status` | enum | ok, error |
 | `latency_ms` | integer | Response time in milliseconds |
-| `last_checked` | datetime | Timestamp of last check (ISO 8601) |
-| `error_message` | string | Error details (only if unhealthy) |
 
 ### Health Check Tests
 

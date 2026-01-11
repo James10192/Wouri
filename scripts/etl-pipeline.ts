@@ -229,8 +229,9 @@ async function checkDuplicate(content: string): Promise<boolean> {
 
     const data = await response.json();
 
+    const items = data.data || [];
     // Si similarité > 0.95, c'est probablement un duplicata
-    return data.results.some((doc: any) => doc.similarity > 0.95);
+    return items.some((doc: any) => doc.similarity > 0.95);
   } catch (error) {
     return false; // En cas d'erreur, considérer comme non-duplicata
   }
@@ -238,21 +239,25 @@ async function checkDuplicate(content: string): Promise<boolean> {
 
 async function importDocument(doc: RawDocument): Promise<boolean> {
   try {
-    const response = await fetch(`${CONFIG.API_BASE_URL}/admin/knowledge`, {
+    const response = await fetch(`${CONFIG.API_BASE_URL}/admin/etl`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-admin-key": CONFIG.ADMIN_API_KEY!,
       },
       body: JSON.stringify({
-        content: `${doc.title}\n\n${doc.content}`,
-        metadata: {
-          source: doc.source,
-          ...(doc.url && { url: doc.url }),
-          ...doc.metadata,
-          verified: doc.source.includes("Ministère") || doc.source.includes("FAO"),
-          language: "fr",
-        },
+        documents: [
+          {
+            content: `${doc.title}\n\n${doc.content}`,
+            metadata: {
+              source: doc.source,
+              ...(doc.url && { url: doc.url }),
+              ...doc.metadata,
+              verified: doc.source.includes("Ministère") || doc.source.includes("FAO"),
+              language: "fr",
+            },
+          },
+        ],
       }),
     });
 

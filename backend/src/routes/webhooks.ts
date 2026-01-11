@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { config } from "@/lib/config";
 import { verifyWebhookSignature, sendWhatsAppMessage, markMessageAsRead } from "@/services/whatsapp";
-import { getUserByWaId, createUser, checkUserQuota, incrementUserQuota } from "@/services/supabase";
+import { getUserByWaId, createUser, checkUserQuota, incrementUserQuota, insertConversationLog } from "@/services/supabase";
 import { ragPipeline, getPaymentReminderMessage } from "@/lib/rag";
 import { SubscriptionExpiredError } from "@/types";
 
@@ -120,6 +120,23 @@ async function processWebhookAsync(payload: any): Promise<void> {
 
     // Send response
     await sendWhatsAppMessage(`+${from}`, response.answer);
+
+    try {
+      await insertConversationLog({
+        wa_id: from,
+        message_id: messageId,
+        message_type: messageType,
+        user_message: messageText,
+        bot_response: response.answer,
+        language: user.preferred_language,
+        region: user.region,
+        model_used: response.metadata?.model,
+        tokens_used: response.metadata?.tokens_used,
+        response_time_ms: response.metadata?.response_time_ms,
+      });
+    } catch (error) {
+      console.warn("⚠️ Failed to store conversation log:", error);
+    }
 
     console.log(`✅ Response sent to ${from} (${response.metadata.tokens_used} tokens, ${response.metadata.response_time_ms}ms)`);
   } catch (error) {

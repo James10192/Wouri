@@ -20,9 +20,9 @@ Content-Type: application/json
 ```json
 {
   "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+  "wa_id": "1234567890",
   "rating": 5,
-  "comment": "Excellent advice on maize planting periods! Very accurate for Bouaké region.",
-  "embed_immediately": true
+  "comment": "Excellent advice on maize planting periods! Very accurate for Bouaké region."
 }
 ```
 
@@ -30,24 +30,27 @@ Content-Type: application/json
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `conversation_id` | UUID | Yes | Associated conversation ID |
+| `conversation_id` | UUID | No | Associated conversation ID |
+| `wa_id` | string | Yes | WhatsApp user ID |
 | `rating` | integer | No | Quality rating (1-5) |
 | `comment` | string | No | Admin feedback (max 2000 chars) |
-| `embed_immediately` | boolean | No | Generate embedding now (default: true) |
 
 ### Response
 
 **Success (201 Created)**:
 ```json
 {
-  "id": "770e8400-e29b-41d4-a716-446655440000",
-  "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
-  "wa_id": "1234567890",
-  "rating": 5,
-  "comment": "Excellent advice on maize planting periods!",
-  "is_embedded": true,
-  "created_at": "2026-01-10T12:00:00Z",
-  "updated_at": "2026-01-10T12:00:00Z"
+  "data": {
+    "id": "770e8400-e29b-41d4-a716-446655440000",
+    "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "wa_id": "1234567890",
+    "rating": 5,
+    "comment": "Excellent advice on maize planting periods!",
+    "is_embedded": true,
+    "created_at": "2026-01-10T12:00:00Z",
+    "updated_at": "2026-01-10T12:00:00Z"
+  },
+  "embeddingError": null
 }
 ```
 
@@ -68,10 +71,10 @@ Content-Type: application/json
 
 ### Processing Flow
 
-1. **Validate** conversation exists
+1. **Validate** payload
 2. **Generate embedding** if comment provided (768-dimensional vector)
 3. **Insert** feedback into database
-4. **Update** conversation stats (feedback_count, average_rating)
+4. **Mark** feedback as embedded when successful
 
 **Embedding Process**:
 - Text → Supabase Edge Function → all-MiniLM-L6-v2 model → 768-dim vector
@@ -86,14 +89,14 @@ const feedback = await adminFetch('/admin/feedback', {
   method: 'POST',
   body: JSON.stringify({
     conversation_id: "550e8400-e29b-41d4-a716-446655440000",
+    wa_id: "1234567890",
     rating: 5,
-    comment: "Excellent advice on maize planting!",
-    embed_immediately: true
+    comment: "Excellent advice on maize planting!"
   })
 });
 
-console.log(`Feedback created: ${feedback.id}`);
-console.log(`Embedded: ${feedback.is_embedded}`);
+console.log(`Feedback created: ${feedback.data.id}`);
+console.log(`Embedded: ${feedback.data.is_embedded}`);
 ```
 
 **curl**:
@@ -103,6 +106,7 @@ curl -X POST "https://wouribot-backend.onrender.com/admin/feedback" \
   -H "Content-Type: application/json" \
   -d '{
     "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
+    "wa_id": "1234567890",
     "rating": 5,
     "comment": "Excellent advice!"
   }'
@@ -126,16 +130,17 @@ Content-Type: application/json
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `limit` | integer | No | 50 | Number of results (max: 100) |
+| `limit` | integer | No | 50 | Number of results (max: 200) |
 | `wa_id` | string | No | - | Filter by WhatsApp user ID |
 | `min_rating` | integer | No | - | Minimum rating (1-5) |
+| `cursor` | ISO datetime | No | - | Pagination cursor |
 
 ### Response
 
 **Success (200 OK)**:
 ```json
 {
-  "feedback": [
+  "data": [
     {
       "id": "770e8400-e29b-41d4-a716-446655440000",
       "conversation_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -156,7 +161,9 @@ Content-Type: application/json
       "created_at": "2026-01-10T13:00:00Z",
       "updated_at": "2026-01-10T13:00:00Z"
     }
-  ]
+  ],
+  "nextCursor": "2026-01-10T13:00:00Z",
+  "hasMore": false
 }
 ```
 
@@ -219,12 +226,12 @@ await adminFetch('/admin/feedback', {
 const allFeedback = await adminFetch('/admin/feedback?limit=1000');
 
 const stats = {
-  total: allFeedback.feedback.length,
-  embedded: allFeedback.feedback.filter(f => f.is_embedded).length,
-  avgRating: allFeedback.feedback
+  total: allFeedback.data.length,
+  embedded: allFeedback.data.filter(f => f.is_embedded).length,
+  avgRating: allFeedback.data
     .filter(f => f.rating)
-    .reduce((sum, f) => sum + f.rating!, 0) / allFeedback.feedback.length,
-  withComments: allFeedback.feedback.filter(f => f.comment).length
+    .reduce((sum, f) => sum + f.rating!, 0) / allFeedback.data.length,
+  withComments: allFeedback.data.filter(f => f.comment).length
 };
 
 console.log('Feedback Stats:', stats);

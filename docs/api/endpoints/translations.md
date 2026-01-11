@@ -44,16 +44,18 @@ Content-Type: application/json
 **Success (201 Created)**:
 ```json
 {
-  "id": "bb0e8400-e29b-41d4-a716-446655440000",
-  "source_text": "Quand planter le maïs?",
-  "source_language": "fr",
-  "target_language": "dioula",
-  "translated_text": "Kaba suman ka sɔrɔ?",
-  "context": "agriculture",
-  "verified": true,
-  "created_by": "admin",
-  "created_at": "2026-01-10T15:00:00Z",
-  "updated_at": "2026-01-10T15:00:00Z"
+  "data": {
+    "id": "bb0e8400-e29b-41d4-a716-446655440000",
+    "source_text": "Quand planter le maïs?",
+    "source_language": "fr",
+    "target_language": "dioula",
+    "translated_text": "Kaba suman ka sɔrɔ?",
+    "context": "agriculture",
+    "verified": true,
+    "created_by": "admin",
+    "created_at": "2026-01-10T15:00:00Z",
+    "updated_at": "2026-01-10T15:00:00Z"
+  }
 }
 ```
 
@@ -98,7 +100,7 @@ const translation = await adminFetch('/admin/translations', {
   })
 });
 
-console.log(`Translation created: ${translation.id}`);
+console.log(`Translation created: ${translation.data.id}`);
 ```
 
 **curl**:
@@ -136,8 +138,8 @@ Content-Type: application/json
 | `query` | string | No | - | Full-text search in source_text |
 | `source_language` | enum | No | - | fr, dioula, baoulé, en |
 | `target_language` | enum | No | - | fr, dioula, baoulé, en |
-| `verified_only` | boolean | No | false | Only verified translations |
-| `limit` | integer | No | 20 | Number of results (max: 100) |
+| `limit` | integer | No | 20 | Number of results (max: 200) |
+| `cursor` | ISO datetime | No | - | Pagination cursor |
 
 ### Response
 
@@ -146,7 +148,7 @@ Content-Type: application/json
 With `query` parameter (full-text search):
 ```json
 {
-  "translations": [
+  "data": [
     {
       "id": "bb0e8400-e29b-41d4-a716-446655440000",
       "source_text": "maïs",
@@ -154,8 +156,7 @@ With `query` parameter (full-text search):
       "target_language": "dioula",
       "translated_text": "kaba",
       "context": "crop name",
-      "verified": true,
-      "relevance": 0.95
+      "verified": true
     },
     {
       "id": "cc0e8400-e29b-41d4-a716-446655440000",
@@ -164,17 +165,18 @@ With `query` parameter (full-text search):
       "target_language": "dioula",
       "translated_text": "kaba suman",
       "context": "agriculture",
-      "verified": true,
-      "relevance": 0.88
+      "verified": true
     }
-  ]
+  ],
+  "nextCursor": "2026-01-10T15:00:00Z",
+  "hasMore": false
 }
 ```
 
 Without `query` parameter (simple filtering):
 ```json
 {
-  "translations": [
+  "data": [
     {
       "id": "bb0e8400-e29b-41d4-a716-446655440000",
       "source_text": "maïs",
@@ -187,7 +189,9 @@ Without `query` parameter (simple filtering):
       "created_at": "2026-01-10T15:00:00Z",
       "updated_at": "2026-01-10T15:00:00Z"
     }
-  ]
+  ],
+  "nextCursor": "2026-01-10T15:00:00Z",
+  "hasMore": false
 }
 ```
 
@@ -198,9 +202,8 @@ Without `query` parameter (simple filtering):
 // Search for "maïs" in source text
 const results = await adminFetch('/admin/translations?query=maïs&limit=10');
 
-results.translations.forEach(t => {
+results.data.forEach(t => {
   console.log(`${t.source_text} (${t.source_language}) → ${t.translated_text} (${t.target_language})`);
-  console.log(`Relevance: ${t.relevance}`);
 });
 ```
 
@@ -293,7 +296,7 @@ for (const source of languages) {
       `/admin/translations?source_language=${source}&target_language=${target}&limit=1000`
     );
 
-    console.log(`${source} → ${target}: ${translations.translations.length} translations`);
+console.log(`${source} → ${target}: ${translations.data.length} translations`);
   }
 }
 
@@ -309,7 +312,7 @@ for (const source of languages) {
 ```typescript
 // Get unverified translations
 const unverified = await adminFetch('/admin/translations?verified_only=false&limit=100');
-const needsReview = unverified.translations.filter(t => !t.verified);
+const needsReview = unverified.data.filter(t => !t.verified);
 
 console.log(`${needsReview.length} translations need verification`);
 
@@ -334,7 +337,7 @@ for (const term of coreTerms) {
     `/admin/translations?query=${term}&source_language=fr&target_language=dioula`
   );
 
-  if (frToDioula.translations.length === 0) {
+  if (frToDioula.data.length === 0) {
     console.warn(`⚠️ Missing FR→Dioula: ${term}`);
   }
 
@@ -343,7 +346,7 @@ for (const term of coreTerms) {
     `/admin/translations?query=${term}&source_language=fr&target_language=baoulé`
   );
 
-  if (frToBaoule.translations.length === 0) {
+  if (frToBaoule.data.length === 0) {
     console.warn(`⚠️ Missing FR→Baoulé: ${term}`);
   }
 }
