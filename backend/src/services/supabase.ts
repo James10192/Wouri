@@ -8,7 +8,7 @@ import type { User } from "../types";
  */
 const SUPABASE_URL = config.SUPABASE_URL;
 
-const fetchWithTimeout: typeof fetch = (url, options = {}) => {
+const fetchWithTimeout = (url: string | Request | URL, options: RequestInit = {}) => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10000);
 
