@@ -25,12 +25,20 @@ const EMBEDDING_FUNCTION_URL = `${config.SUPABASE_URL}/functions/v1/embed`;
  * console.log(embedding.length); // 384
  * ```
  */
-export async function getTextEmbedding(text: string): Promise<number[]> {
+export async function getTextEmbedding(
+  text: string,
+  options: { timeoutMs?: number } = {}
+): Promise<number[]> {
   if (!text || text.trim().length === 0) {
     throw new Error("Text cannot be empty");
   }
 
   try {
+    const controller = new AbortController();
+    const timeoutId = options.timeoutMs
+      ? setTimeout(() => controller.abort(), options.timeoutMs)
+      : undefined;
+
     const response = await fetch(EMBEDDING_FUNCTION_URL, {
       method: "POST",
       headers: {
@@ -38,7 +46,12 @@ export async function getTextEmbedding(text: string): Promise<number[]> {
         "Authorization": `Bearer ${config.SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify({ text: text.trim() }),
+      signal: controller.signal,
     });
+
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -58,6 +71,9 @@ export async function getTextEmbedding(text: string): Promise<number[]> {
 
     return data.embedding as number[];
   } catch (error: any) {
+    if (error?.name === "AbortError") {
+      throw new Error("Embedding request timed out");
+    }
     console.error("[Embeddings] Failed to generate embedding:", error.message);
 
     // If Supabase Edge Function is not available, provide helpful error

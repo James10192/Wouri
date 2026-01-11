@@ -479,7 +479,7 @@ admin.post("/feedback", async (c) => {
   let embeddingError: string | null = null;
   if (comment && typeof comment === "string") {
     try {
-      const embedding = await getTextEmbedding(comment);
+      const embedding = await getTextEmbedding(comment, { timeoutMs: 3000 });
       const { error: insertError } = await adminSupabase.from("documents").insert({
         content: comment,
         embedding,

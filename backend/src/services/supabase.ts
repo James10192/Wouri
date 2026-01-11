@@ -184,10 +184,13 @@ export async function searchDocumentsByKeyword(
  * Get embedding for text using production embedding service
  * Uses Supabase Edge Function with all-MiniLM-L6-v2 model (768 dimensions)
  */
-export async function getTextEmbedding(text: string): Promise<number[]> {
+export async function getTextEmbedding(
+  text: string,
+  options?: { timeoutMs?: number }
+): Promise<number[]> {
   // Import production embedding service
   const { getTextEmbedding: embedFn } = await import("./embeddings");
-  return embedFn(text);
+  return embedFn(text, options);
 }
 
 export type ConversationLog = {

@@ -43,7 +43,7 @@ feedback.post("/", async (c) => {
     let embedding: number[] | null = null;
     if (validated.comment && validated.embed_immediately) {
       try {
-        embedding = await getTextEmbedding(validated.comment);
+        embedding = await getTextEmbedding(validated.comment, { timeoutMs: 3000 });
         console.log(`[Admin API] Generated embedding for feedback (${embedding.length} dimensions)`);
       } catch (embedError: any) {
         console.error("[Admin API] Embedding generation failed:", embedError);
