@@ -16,15 +16,15 @@ export const envSchema = z.object({
   // Groq API (FREE)
   GROQ_API_KEY: z.string().startsWith("gsk_"),
 
-  // WhatsApp
-  WHATSAPP_ACCESS_TOKEN: z.string().min(1),
-  WHATSAPP_PHONE_NUMBER_ID: z.string().min(1),
-  WHATSAPP_APP_SECRET: z.string().min(1),
-  WHATSAPP_VERIFY_TOKEN: z.string().min(1),
+  // WhatsApp (optional for now - configure later)
+  WHATSAPP_ACCESS_TOKEN: z.string().min(1).optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().min(1).optional(),
+  WHATSAPP_APP_SECRET: z.string().min(1).optional(),
+  WHATSAPP_VERIFY_TOKEN: z.string().min(1).optional(),
 
-  // FedaPay
-  FEDAPAY_SECRET_KEY: z.string().min(1),
-  FEDAPAY_PUBLIC_KEY: z.string().min(1),
+  // FedaPay (optional for now - configure later)
+  FEDAPAY_SECRET_KEY: z.string().min(1).optional(),
+  FEDAPAY_PUBLIC_KEY: z.string().min(1).optional(),
 
   // OpenWeatherMap
   OPENWEATHER_API_KEY: z.string().min(1),
