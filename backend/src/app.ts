@@ -6,6 +6,7 @@ import webhooks from "./routes/webhooks";
 import test from "./routes/test";
 import models from "./routes/models";
 import admin from "./routes/admin";
+import chat from "./routes/chat";
 
 /**
  * Wouri Bot Backend
@@ -58,6 +59,9 @@ app.route("/webhooks", webhooks);
 
 // Models endpoint
 app.route("/models", models);
+
+// Chat endpoint (production)
+app.route("/chat", chat);
 
 // Admin API
 app.route("/admin", admin);
