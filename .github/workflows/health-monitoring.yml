@@ -27,7 +27,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           cd backend
-          bun install --ignore-scripts
+          SKIP_PRISMA_GENERATE=1 bun install --ignore-scripts
 
       - name: Run health monitoring
         env:
