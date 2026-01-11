@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "bun build src/index.ts --outdir ./dist --target node",
+    "build": "bun build src/index.ts --outfile ./dist/index.js --target node --minify --external @prisma/client",
+    "build:vercel": "prisma generate && bun build src/index.ts --outfile ./dist/index.js --target node --minify --external @prisma/client",
     "test": "bun test",
     "lint": "bunx @biomejs/biome check src/",
     "format": "bunx @biomejs/biome format --write src/"
