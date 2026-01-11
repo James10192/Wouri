@@ -153,7 +153,7 @@ RÈGLES:
 3. Questions autres: dire "Manfue spécialiste agriculture"`,
     };
 
-    return smallTalkPrompts[language] || smallTalkPrompts.fr;
+    return smallTalkPrompts[language] || smallTalkPrompts["fr"];
   }
 
   // RAG mode avec documents
@@ -187,7 +187,7 @@ RÈGLES:
 4. Maximum 150 mots`,
   };
 
-  return prompts[language] || prompts.fr;
+  return prompts[language] || prompts["fr"];
 }
 
 /**
@@ -278,34 +278,6 @@ function extractReasoningPayload(content: string): ParsedReasoningPayload | null
   }
 
   return normalizePayload({ reasoning, answer });
-}
-
-function extractJsonPayload(content: string): ParsedReasoningPayload | null {
-  const trimmed = content.trim();
-  const direct = safeJsonParse(trimmed);
-  if (direct) {
-    return normalizePayload(direct);
-  }
-
-  const fencedMatch = trimmed.match(/```json\s*([\s\S]*?)\s*```/i);
-  if (fencedMatch?.[1]) {
-    const fenced = safeJsonParse(fencedMatch[1].trim());
-    if (fenced) {
-      return normalizePayload(fenced);
-    }
-  }
-
-  const firstBrace = trimmed.indexOf("{");
-  const lastBrace = trimmed.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    const slice = trimmed.slice(firstBrace, lastBrace + 1);
-    const sliced = safeJsonParse(slice);
-    if (sliced) {
-      return normalizePayload(sliced);
-    }
-  }
-
-  return null;
 }
 
 type JsonSliceResult = {
@@ -416,7 +388,7 @@ function maybeUnescapeJsonString(value: string): string | null {
  * Generate text embedding using Groq (if available)
  * Note: Groq doesn't have embedding models yet, use sentence-transformers via Supabase Edge Function
  */
-export async function generateEmbedding(text: string): Promise<number[]> {
+export async function generateEmbedding(_text: string): Promise<number[]> {
   // TODO: Implement via Supabase Edge Function or external embedding service
   // For now, return mock (replace in production)
 
