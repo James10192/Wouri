@@ -699,11 +699,26 @@ admin.post("/translations", async (c) => {
     .select()
     .single();
 
+  // If duplicate, return existing translation
+  if (error && error.code === "23505") {
+    const { data: existing } = await adminSupabase
+      .from("translations")
+      .select("*")
+      .eq("source_text", source_text)
+      .eq("source_language", source_language)
+      .eq("target_language", target_language)
+      .single();
+
+    if (existing) {
+      return c.json({ data: existing, existing: true }, 200);
+    }
+  }
+
   if (error) {
     return c.json({ error: "Failed to insert translation", message: error.message }, 500);
   }
 
-  return c.json({ data }, 201);
+  return c.json({ data, existing: false }, 201);
 });
 
 admin.get("/monitoring", async (c) => {
