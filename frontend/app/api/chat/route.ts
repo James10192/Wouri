@@ -93,7 +93,9 @@ export async function POST(req: Request) {
     },
   })
 
-  return createUIMessageStreamResponse({ stream })
+  const res = createUIMessageStreamResponse({ stream })
+  res.headers.set("x-runtime", "edge")
+  return res
 }
 
 async function streamFromBackend(
