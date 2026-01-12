@@ -107,6 +107,14 @@ const etlSchema = z.object({
 const queryValidationError = (c: any, issues: any) =>
   c.json({ error: "Validation error", message: issues }, 400);
 
+const logAdminError = (label: string, error: any) => {
+  console.error(`❌ ${label}`, {
+    name: error?.name,
+    message: error?.message,
+    stack: error?.stack,
+  });
+};
+
 const isTimeoutError = (error: unknown) =>
   typeof (error as any)?.message === "string" &&
   (((error as any).message.includes("timeout")) || (error as any).name === "AbortError");
@@ -414,6 +422,7 @@ admin.post("/etl", async (c) => {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
     }
+    logAdminError("admin.etl", error);
     return c.json({ error: "Failed to parse request", message: error.message }, 500);
   }
   const parsed = etlSchema.safeParse(body);
@@ -514,6 +523,7 @@ admin.post("/etl", async (c) => {
           503,
         );
       }
+      logAdminError("admin.etl.insert", error);
       results.push({
         index: i,
         status: "error",
@@ -584,6 +594,7 @@ admin.post("/feedback", async (c) => {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
     }
+    logAdminError("admin.feedback.parse", error);
     return c.json({ error: "Failed to parse request", message: error.message }, 500);
   }
   const parsed = feedbackSchema.safeParse(body);
@@ -635,6 +646,7 @@ admin.post("/feedback", async (c) => {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
     }
+    logAdminError("admin.feedback.insert", error);
     return c.json({ error: "Failed to create feedback", message: error.message }, 500);
   }
 
@@ -746,6 +758,7 @@ admin.post("/feedback", async (c) => {
         if (isTimeoutError(error)) {
           return c.json({ error: "Admin write timeout" }, 503);
         }
+        logAdminError("admin.feedback.embed", error);
         embeddingError = error.message || "Embedding failed";
       }
     }
@@ -838,6 +851,7 @@ admin.post("/knowledge", async (c) => {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
     }
+    logAdminError("admin.knowledge.parse", error);
     return c.json({ error: "Failed to parse request", message: error.message }, 500);
   }
   const parsed = knowledgeSchema.safeParse(body);
@@ -921,6 +935,7 @@ admin.post("/knowledge", async (c) => {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
     }
+    logAdminError("admin.knowledge.embed", error);
     return c.json({ error: "Embedding failed", message: error.message }, 500);
   }
 });
@@ -994,6 +1009,7 @@ admin.post("/translations", async (c) => {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
     }
+    logAdminError("admin.translations.parse", error);
     return c.json({ error: "Failed to parse request", message: error.message }, 500);
   }
   const parsed = translationSchema.safeParse(body);
@@ -1043,6 +1059,7 @@ admin.post("/translations", async (c) => {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
     }
+    logAdminError("admin.translations.insert", error);
     return c.json({ error: "Failed to insert translation", message: error.message }, 500);
   }
 
