@@ -109,15 +109,42 @@ const queryValidationError = (c: any, issues: any) =>
 
 const isTimeoutError = (error: unknown) =>
   typeof (error as any)?.message === "string" &&
-  (error as any).message.includes("timeout");
+  (((error as any).message.includes("timeout")) || (error as any).name === "AbortError");
 
-const withAdminTimeout = async <T>(label: string, action: () => PromiseLike<T> | T): Promise<T> => {
+const withAdminTimeout = async <T>(
+  label: string,
+  action: (signal: AbortSignal) => PromiseLike<T> | T,
+): Promise<T> => {
   const start = Date.now();
   try {
-    return await withTimeout(Promise.resolve(action()), ADMIN_WRITE_TIMEOUT_MS, label);
+    return await withTimeoutAbort(action, ADMIN_WRITE_TIMEOUT_MS, label);
   } finally {
     const duration = Date.now() - start;
     console.log(`🧭 [admin] ${label} ${duration}ms`);
+  }
+};
+
+const supabaseRestInsert = async (
+  table: string,
+  payload: Record<string, unknown>,
+  signal: AbortSignal,
+) => {
+  const url = `${config.SUPABASE_URL}/rest/v1/${table}`;
+  const response = await fetch(url, {
+    method: "POST",
+    signal,
+    headers: {
+      apikey: config.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${config.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`supabase rest insert failed (${response.status}): ${text}`);
   }
 };
 
@@ -382,7 +409,7 @@ admin.get("/messages/stream", async (c) => {
 admin.post("/etl", async (c) => {
   let body;
   try {
-    body = await withAdminTimeout("admin.etl.parse", () => c.req.json());
+    body = await withAdminTimeout("admin.etl.parse", (_signal) => c.req.json());
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
@@ -410,12 +437,65 @@ admin.post("/etl", async (c) => {
     const doc = documents[i];
     try {
       if (!SHOULD_EMBED_SYNC) {
-        const { error } = await withAdminTimeout(`admin.etl.insert.${i}`, () =>
+        if (USE_MINIMAL_RETURN) {
+          await withAdminTimeout(`admin.etl.rest.insert.${i}`, (signal) =>
+            supabaseRestInsert(
+              "documents",
+              {
+                content: doc.content,
+                metadata: doc.metadata || {},
+              },
+              signal,
+            ),
+          );
+          results.push({ index: i, status: "ok", embedding_pending: true });
+        } else {
+          const { error } = await withAdminTimeout(`admin.etl.insert.${i}`, (_signal) =>
+            adminSupabase
+              .from("documents")
+              .insert(
+                {
+                  content: doc.content,
+                  metadata: doc.metadata || {},
+                },
+                minimalInsertOptions,
+              ),
+          );
+          if (error) {
+            results.push({ index: i, status: "error", error: error.message });
+          } else {
+            results.push({ index: i, status: "ok", embedding_pending: true });
+          }
+        }
+        continue;
+      }
+
+      const embedding = await withAdminTimeout(`admin.etl.embed.${i}`, (_signal) =>
+        getTextEmbedding(doc.content, {
+          timeoutMs: EMBEDDING_TIMEOUT_MS,
+        }),
+      );
+      if (USE_MINIMAL_RETURN) {
+        await withAdminTimeout(`admin.etl.rest.insert.${i}`, (signal) =>
+          supabaseRestInsert(
+            "documents",
+            {
+              content: doc.content,
+              embedding,
+              metadata: doc.metadata || {},
+            },
+            signal,
+          ),
+        );
+        results.push({ index: i, status: "ok" });
+      } else {
+        const { error } = await withAdminTimeout(`admin.etl.insert.${i}`, (_signal) =>
           adminSupabase
             .from("documents")
             .insert(
               {
                 content: doc.content,
+                embedding,
                 metadata: doc.metadata || {},
               },
               minimalInsertOptions,
@@ -424,32 +504,8 @@ admin.post("/etl", async (c) => {
         if (error) {
           results.push({ index: i, status: "error", error: error.message });
         } else {
-          results.push({ index: i, status: "ok", embedding_pending: true });
+          results.push({ index: i, status: "ok" });
         }
-        continue;
-      }
-
-      const embedding = await withAdminTimeout(`admin.etl.embed.${i}`, () =>
-        getTextEmbedding(doc.content, {
-          timeoutMs: EMBEDDING_TIMEOUT_MS,
-        }),
-      );
-      const { error } = await withAdminTimeout(`admin.etl.insert.${i}`, () =>
-        adminSupabase
-          .from("documents")
-          .insert(
-            {
-              content: doc.content,
-              embedding,
-              metadata: doc.metadata || {},
-            },
-            minimalInsertOptions,
-          ),
-      );
-      if (error) {
-        results.push({ index: i, status: "error", error: error.message });
-      } else {
-        results.push({ index: i, status: "ok" });
       }
     } catch (error: any) {
       if (isTimeoutError(error)) {
@@ -523,7 +579,7 @@ admin.get("/feedback", async (c) => {
 admin.post("/feedback", async (c) => {
   let body;
   try {
-    body = await withAdminTimeout("admin.feedback.parse", () => c.req.json());
+    body = await withAdminTimeout("admin.feedback.parse", (_signal) => c.req.json());
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
@@ -539,8 +595,9 @@ admin.post("/feedback", async (c) => {
   let data;
   try {
     if (USE_MINIMAL_RETURN) {
-      const response = await withAdminTimeout("admin.feedback.insert", () =>
-        adminSupabase.from("feedback").insert(
+      await withAdminTimeout("admin.feedback.rest.insert", (signal) =>
+        supabaseRestInsert(
+          "feedback",
           {
             conversation_id: conversation_id || null,
             wa_id,
@@ -548,18 +605,12 @@ admin.post("/feedback", async (c) => {
             comment: comment ?? null,
             is_embedded: SHOULD_EMBED_SYNC && Boolean(comment),
           },
-          minimalInsertOptions,
+          signal,
         ),
       );
-      if (response.error) {
-        return c.json(
-          { error: "Failed to create feedback", message: response.error.message },
-          500,
-        );
-      }
       data = { status: "ok" };
     } else {
-      const response = await withAdminTimeout("admin.feedback.insert", () =>
+      const response = await withAdminTimeout("admin.feedback.insert", (_signal) =>
         adminSupabase
           .from("feedback")
           .insert({
@@ -590,12 +641,11 @@ admin.post("/feedback", async (c) => {
   let embeddingError: string | null = null;
   if (comment && typeof comment === "string") {
     if (!SHOULD_EMBED_SYNC) {
-      const { error: insertError } = await withAdminTimeout(
-        "admin.feedback.documents.insert",
-        () =>
-          adminSupabase
-            .from("documents")
-            .insert(
+      if (USE_MINIMAL_RETURN) {
+        try {
+          await withAdminTimeout("admin.feedback.documents.rest.insert", (signal) =>
+            supabaseRestInsert(
+              "documents",
               {
                 content: comment,
                 metadata: {
@@ -605,29 +655,21 @@ admin.post("/feedback", async (c) => {
                   rating: rating ?? null,
                 },
               },
-              minimalInsertOptions,
+              signal,
             ),
-      );
-
-      if (insertError) {
-        embeddingError = insertError.message;
-      }
-    } else {
-      try {
-        const embedding = await withAdminTimeout("admin.feedback.embed", () =>
-          getTextEmbedding(comment, {
-            timeoutMs: EMBEDDING_TIMEOUT_MS,
-          }),
-        );
+          );
+        } catch (error: any) {
+          embeddingError = error.message || "Insert failed";
+        }
+      } else {
         const { error: insertError } = await withAdminTimeout(
           "admin.feedback.documents.insert",
-          () =>
+          (_signal) =>
             adminSupabase
               .from("documents")
               .insert(
                 {
                   content: comment,
-                  embedding,
                   metadata: {
                     source: "Admin Feedback",
                     conversation_id: conversation_id || null,
@@ -641,10 +683,64 @@ admin.post("/feedback", async (c) => {
 
         if (insertError) {
           embeddingError = insertError.message;
-        } else if (!USE_MINIMAL_RETURN) {
-          await withAdminTimeout("admin.feedback.update", () =>
-            adminSupabase.from("feedback").update({ is_embedded: true }).eq("id", data.id),
+        }
+      }
+    } else {
+      try {
+        const embedding = await withAdminTimeout("admin.feedback.embed", (_signal) =>
+          getTextEmbedding(comment, {
+            timeoutMs: EMBEDDING_TIMEOUT_MS,
+          }),
+        );
+        if (USE_MINIMAL_RETURN) {
+          try {
+            await withAdminTimeout("admin.feedback.documents.rest.insert", (signal) =>
+              supabaseRestInsert(
+                "documents",
+                {
+                  content: comment,
+                  embedding,
+                  metadata: {
+                    source: "Admin Feedback",
+                    conversation_id: conversation_id || null,
+                    wa_id,
+                    rating: rating ?? null,
+                  },
+                },
+                signal,
+              ),
+            );
+          } catch (error: any) {
+            embeddingError = error.message || "Insert failed";
+          }
+        } else {
+          const { error: insertError } = await withAdminTimeout(
+            "admin.feedback.documents.insert",
+            (_signal) =>
+              adminSupabase
+                .from("documents")
+                .insert(
+                  {
+                    content: comment,
+                    embedding,
+                    metadata: {
+                      source: "Admin Feedback",
+                      conversation_id: conversation_id || null,
+                      wa_id,
+                      rating: rating ?? null,
+                    },
+                  },
+                  minimalInsertOptions,
+                ),
           );
+
+          if (insertError) {
+            embeddingError = insertError.message;
+          } else if (!USE_MINIMAL_RETURN) {
+            await withAdminTimeout("admin.feedback.update", (_signal) =>
+              adminSupabase.from("feedback").update({ is_embedded: true }).eq("id", data.id),
+            );
+          }
         }
       } catch (error: any) {
         if (isTimeoutError(error)) {
@@ -737,7 +833,7 @@ admin.get("/knowledge", async (c) => {
 admin.post("/knowledge", async (c) => {
   let body;
   try {
-    body = await withAdminTimeout("admin.knowledge.parse", () => c.req.json());
+    body = await withAdminTimeout("admin.knowledge.parse", (_signal) => c.req.json());
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
@@ -751,71 +847,76 @@ admin.post("/knowledge", async (c) => {
   const { content, metadata } = parsed.data;
 
   if (!SHOULD_EMBED_SYNC) {
-    const response = await withAdminTimeout("admin.knowledge.insert", () =>
-      USE_MINIMAL_RETURN
-        ? adminSupabase
-            .from("documents")
-            .insert(
-              {
-                content,
-                metadata: metadata || {},
-              },
-              minimalInsertOptions,
-            )
-        : adminSupabase
-            .from("documents")
-            .insert({
-              content,
-              metadata: metadata || {},
-            })
-            .select()
-            .single(),
+    if (USE_MINIMAL_RETURN) {
+      await withAdminTimeout("admin.knowledge.rest.insert", (signal) =>
+        supabaseRestInsert(
+          "documents",
+          {
+            content,
+            metadata: metadata || {},
+          },
+          signal,
+        ),
+      );
+      return c.json({ data: { status: "ok" }, embeddingStatus: "pending" }, 201);
+    }
+
+    const response = await withAdminTimeout("admin.knowledge.insert", (_signal) =>
+      adminSupabase
+        .from("documents")
+        .insert({
+          content,
+          metadata: metadata || {},
+        })
+        .select()
+        .single(),
     );
 
     if (response.error) {
       return c.json({ error: "Failed to insert knowledge", message: response.error.message }, 500);
     }
 
-    return c.json(
-      { data: USE_MINIMAL_RETURN ? { status: "ok" } : response.data, embeddingStatus: "pending" },
-      201,
-    );
+    return c.json({ data: response.data, embeddingStatus: "pending" }, 201);
   }
 
   try {
-    const embedding = await withAdminTimeout("admin.knowledge.embed", () =>
+    const embedding = await withAdminTimeout("admin.knowledge.embed", (_signal) =>
       getTextEmbedding(content, {
         timeoutMs: EMBEDDING_TIMEOUT_MS,
       }),
     );
-    const response = await withAdminTimeout("admin.knowledge.insert", () =>
-      USE_MINIMAL_RETURN
-        ? adminSupabase
-            .from("documents")
-            .insert(
-              {
-                content,
-                embedding,
-                metadata: metadata || {},
-              },
-              minimalInsertOptions,
-            )
-        : adminSupabase
-            .from("documents")
-            .insert({
-              content,
-              embedding,
-              metadata: metadata || {},
-            })
-            .select()
-            .single(),
+    if (USE_MINIMAL_RETURN) {
+      await withAdminTimeout("admin.knowledge.rest.insert", (signal) =>
+        supabaseRestInsert(
+          "documents",
+          {
+            content,
+            embedding,
+            metadata: metadata || {},
+          },
+          signal,
+        ),
+      );
+      return c.json({ data: { status: "ok" } }, 201);
+    }
+
+    const response = await withAdminTimeout("admin.knowledge.insert", (_signal) =>
+      adminSupabase
+        .from("documents")
+        .insert({
+          content,
+          embedding,
+          metadata: metadata || {},
+        })
+        .select()
+        .single(),
     );
 
     if (response.error) {
       return c.json({ error: "Failed to insert knowledge", message: response.error.message }, 500);
     }
 
-    return c.json({ data: USE_MINIMAL_RETURN ? { status: "ok" } : response.data }, 201);
+    return c.json({ data: response.data }, 201);
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
@@ -888,7 +989,7 @@ admin.get("/translations", async (c) => {
 admin.post("/translations", async (c) => {
   let body;
   try {
-    body = await withAdminTimeout("admin.translations.parse", () => c.req.json());
+    body = await withAdminTimeout("admin.translations.parse", (_signal) => c.req.json());
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
@@ -905,8 +1006,9 @@ admin.post("/translations", async (c) => {
   let insertResult;
   try {
     if (USE_MINIMAL_RETURN) {
-      insertResult = await withAdminTimeout("admin.translations.insert", () =>
-        adminSupabase.from("translations").insert(
+      await withAdminTimeout("admin.translations.rest.insert", (signal) =>
+        supabaseRestInsert(
+          "translations",
           {
             source_text,
             source_language,
@@ -916,11 +1018,12 @@ admin.post("/translations", async (c) => {
             verified: Boolean(verified),
             created_by: created_by ?? null,
           },
-          minimalInsertOptions,
+          signal,
         ),
       );
+      insertResult = { data: { status: "ok" }, error: null };
     } else {
-      insertResult = await withAdminTimeout("admin.translations.insert", () =>
+      insertResult = await withAdminTimeout("admin.translations.insert", (_signal) =>
         adminSupabase
           .from("translations")
           .insert({
@@ -947,7 +1050,7 @@ admin.post("/translations", async (c) => {
 
   // If duplicate, return existing translation
   if (error && error.code === "23505") {
-    const { data: existing } = await withAdminTimeout("admin.translations.select", () =>
+    const { data: existing } = await withAdminTimeout("admin.translations.select", (_signal) =>
       adminSupabase
         .from("translations")
         .select("*")
@@ -1011,7 +1114,7 @@ admin.get("/monitoring", async (c) => {
 admin.get("/diag/supabase-ping", async (c) => {
   const start = Date.now();
   try {
-    const response = await withAdminTimeout("admin.diag.supabase.select", () =>
+    const response = await withAdminTimeout("admin.diag.supabase.select", (_signal) =>
       adminSupabase.from("feedback").select("id").limit(1),
     );
 
@@ -1033,8 +1136,9 @@ admin.get("/diag/supabase-rest", async (c) => {
   const start = Date.now();
   const url = `${config.SUPABASE_URL}/rest/v1/feedback?select=id&limit=1`;
   try {
-    const response = await withAdminTimeout("admin.diag.supabase.rest", () =>
+    const response = await withAdminTimeout("admin.diag.supabase.rest", (signal) =>
       fetch(url, {
+        signal,
         headers: {
           apikey: config.SUPABASE_SERVICE_ROLE_KEY,
           Authorization: `Bearer ${config.SUPABASE_SERVICE_ROLE_KEY}`,
@@ -1118,19 +1222,22 @@ admin.post("/conversations", async (c) => {
 
 export default admin;
 
-async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(`${label} timeout after ${ms}ms`));
-    }, ms);
-  });
+async function withTimeoutAbort<T>(
+  action: (signal: AbortSignal) => PromiseLike<T> | T,
+  ms: number,
+  label: string,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ms);
 
   try {
-    return await Promise.race([promise, timeoutPromise]);
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
+    return await Promise.resolve(action(controller.signal));
+  } catch (error: any) {
+    if (controller.signal.aborted) {
+      throw new Error(`${label} timeout after ${ms}ms`);
     }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
