@@ -44,6 +44,45 @@ Les variables sont automatiquement chargées depuis GitHub Secrets :
 
 ## 📋 Scripts Disponibles
 
+### 0. Diagnostics Vercel (timeouts + streaming)
+
+**Fichier**: `test-vercel-diagnostics.sh`
+
+**Description**: Vérifie rapidement les endpoints critiques (admin, chat SSE, ETL)
+et affiche les temps de réponse pour identifier les timeouts.
+
+**Usage**:
+```bash
+API_BASE_URL=https://wouri-ashen.vercel.app \
+ADMIN_API_KEY=your_admin_key \
+FRONTEND_URL=https://<your-frontend>.vercel.app \
+bash scripts/test-vercel-diagnostics.sh
+```
+
+**Mode JSON**:
+```bash
+OUTPUT_JSON=1 \
+JSON_OUTPUT_PATH=/tmp/wouri-diagnostics.jsonl \
+API_BASE_URL=https://wouri-ashen.vercel.app \
+ADMIN_API_KEY=your_admin_key \
+bash scripts/test-vercel-diagnostics.sh
+```
+
+### 0.1 Diagnostics Supabase inserts
+
+**Fichier**: `test-supabase-inserts.sh`
+
+**Description**: Isole les writes Supabase via les endpoints admin pour repérer
+les requêtes qui timeout.
+
+**Usage**:
+```bash
+API_BASE_URL=https://wouri-ashen.vercel.app \
+ADMIN_API_KEY=your_admin_key \
+REPEAT=3 \
+bash scripts/test-supabase-inserts.sh
+```
+
 ### 1. ETL Pipeline (Collecte Automatisée)
 
 **Fichier**: `etl-pipeline.ts`

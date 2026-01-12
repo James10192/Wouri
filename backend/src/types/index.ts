@@ -40,6 +40,7 @@ export const envSchema = z.object({
   GROQ_TIMEOUT_MS: z.string().optional().default("30000"),
   WEATHER_TIMEOUT_MS: z.string().optional().default("3000"),
   RAG_PIPELINE_TIMEOUT_MS: z.string().optional().default("45000"),
+  ADMIN_WRITE_TIMEOUT_MS: z.string().optional().default("15000"),
 });
 
 export type Env = z.infer<typeof envSchema>;

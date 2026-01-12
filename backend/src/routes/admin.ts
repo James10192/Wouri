@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAdminKey } from "../lib/admin-auth";
+import { config } from "../lib/config";
 import {
   adminSupabase,
   insertConversationLog,
@@ -19,6 +20,10 @@ admin.use("*", requireAdminKey);
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const EMBEDDING_TIMEOUT_MS = 3000;
+const ADMIN_WRITE_TIMEOUT_MS = Math.min(
+  parseInt(config.ADMIN_WRITE_TIMEOUT_MS || "15000", 10),
+  45000,
+);
 const SHOULD_EMBED_SYNC = !process.env["VERCEL"];
 
 const paginationSchema = z.object({
@@ -99,6 +104,20 @@ const etlSchema = z.object({
 
 const queryValidationError = (c: any, issues: any) =>
   c.json({ error: "Validation error", message: issues }, 400);
+
+const isTimeoutError = (error: unknown) =>
+  typeof (error as any)?.message === "string" &&
+  (error as any).message.includes("timeout");
+
+const withAdminTimeout = async <T>(label: string, action: () => Promise<T>) => {
+  const start = Date.now();
+  try {
+    return await withTimeout(action(), ADMIN_WRITE_TIMEOUT_MS, label);
+  } finally {
+    const duration = Date.now() - start;
+    console.log(`🧭 [admin] ${label} ${duration}ms`);
+  }
+};
 
 const toMessages = (conversation: any) => {
   const base = {
@@ -359,7 +378,15 @@ admin.get("/messages/stream", async (c) => {
 });
 
 admin.post("/etl", async (c) => {
-  const body = await c.req.json();
+  let body;
+  try {
+    body = await withAdminTimeout("admin.etl.parse", () => c.req.json());
+  } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ error: "Admin write timeout" }, 503);
+    }
+    return c.json({ error: "Failed to parse request", message: error.message }, 500);
+  }
   const parsed = etlSchema.safeParse(body);
   if (!parsed.success) {
     return queryValidationError(c, parsed.error.issues);
@@ -381,10 +408,12 @@ admin.post("/etl", async (c) => {
     const doc = documents[i];
     try {
       if (!SHOULD_EMBED_SYNC) {
-        const { error } = await adminSupabase.from("documents").insert({
-          content: doc.content,
-          metadata: doc.metadata || {},
-        });
+        const { error } = await withAdminTimeout(`admin.etl.insert.${i}`, () =>
+          adminSupabase.from("documents").insert({
+            content: doc.content,
+            metadata: doc.metadata || {},
+          }),
+        );
         if (error) {
           results.push({ index: i, status: "error", error: error.message });
         } else {
@@ -393,20 +422,30 @@ admin.post("/etl", async (c) => {
         continue;
       }
 
-      const embedding = await getTextEmbedding(doc.content, {
-        timeoutMs: EMBEDDING_TIMEOUT_MS,
-      });
-      const { error } = await adminSupabase.from("documents").insert({
-        content: doc.content,
-        embedding,
-        metadata: doc.metadata || {},
-      });
+      const embedding = await withAdminTimeout(`admin.etl.embed.${i}`, () =>
+        getTextEmbedding(doc.content, {
+          timeoutMs: EMBEDDING_TIMEOUT_MS,
+        }),
+      );
+      const { error } = await withAdminTimeout(`admin.etl.insert.${i}`, () =>
+        adminSupabase.from("documents").insert({
+          content: doc.content,
+          embedding,
+          metadata: doc.metadata || {},
+        }),
+      );
       if (error) {
         results.push({ index: i, status: "error", error: error.message });
       } else {
         results.push({ index: i, status: "ok" });
       }
     } catch (error: any) {
+      if (isTimeoutError(error)) {
+        return c.json(
+          { error: "Admin write timeout", message: "ETL insert timed out" },
+          503,
+        );
+      }
       results.push({
         index: i,
         status: "error",
@@ -470,67 +509,103 @@ admin.get("/feedback", async (c) => {
 });
 
 admin.post("/feedback", async (c) => {
-  const body = await c.req.json();
+  let body;
+  try {
+    body = await withAdminTimeout("admin.feedback.parse", () => c.req.json());
+  } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ error: "Admin write timeout" }, 503);
+    }
+    return c.json({ error: "Failed to parse request", message: error.message }, 500);
+  }
   const parsed = feedbackSchema.safeParse(body);
   if (!parsed.success) {
     return queryValidationError(c, parsed.error.issues);
   }
   const { conversation_id, wa_id, rating, comment } = parsed.data;
 
-  const { data, error } = await adminSupabase
-    .from("feedback")
-    .insert({
-      conversation_id: conversation_id || null,
-      wa_id,
-      rating: rating ?? null,
-      comment: comment ?? null,
-      is_embedded: false,
-    })
-    .select()
-    .single();
-
-  if (error) {
+  let data;
+  try {
+    const response = await withAdminTimeout("admin.feedback.insert", () =>
+      adminSupabase
+        .from("feedback")
+        .insert({
+          conversation_id: conversation_id || null,
+          wa_id,
+          rating: rating ?? null,
+          comment: comment ?? null,
+          is_embedded: false,
+        })
+        .select()
+        .single(),
+    );
+    data = response.data;
+    if (response.error) {
+      return c.json(
+        { error: "Failed to create feedback", message: response.error.message },
+        500,
+      );
+    }
+  } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ error: "Admin write timeout" }, 503);
+    }
     return c.json({ error: "Failed to create feedback", message: error.message }, 500);
   }
 
   let embeddingError: string | null = null;
   if (comment && typeof comment === "string") {
     if (!SHOULD_EMBED_SYNC) {
-      const { error: insertError } = await adminSupabase.from("documents").insert({
-        content: comment,
-        metadata: {
-          source: "Admin Feedback",
-          conversation_id: conversation_id || null,
-          wa_id,
-          rating: rating ?? null,
-        },
-      });
+      const { error: insertError } = await withAdminTimeout(
+        "admin.feedback.documents.insert",
+        () =>
+          adminSupabase.from("documents").insert({
+            content: comment,
+            metadata: {
+              source: "Admin Feedback",
+              conversation_id: conversation_id || null,
+              wa_id,
+              rating: rating ?? null,
+            },
+          }),
+      );
 
       if (insertError) {
         embeddingError = insertError.message;
       }
     } else {
       try {
-        const embedding = await getTextEmbedding(comment, {
-          timeoutMs: EMBEDDING_TIMEOUT_MS,
-        });
-        const { error: insertError } = await adminSupabase.from("documents").insert({
-          content: comment,
-          embedding,
-          metadata: {
-            source: "Admin Feedback",
-            conversation_id: conversation_id || null,
-            wa_id,
-            rating: rating ?? null,
-          },
-        });
+        const embedding = await withAdminTimeout("admin.feedback.embed", () =>
+          getTextEmbedding(comment, {
+            timeoutMs: EMBEDDING_TIMEOUT_MS,
+          }),
+        );
+        const { error: insertError } = await withAdminTimeout(
+          "admin.feedback.documents.insert",
+          () =>
+            adminSupabase.from("documents").insert({
+              content: comment,
+              embedding,
+              metadata: {
+                source: "Admin Feedback",
+                conversation_id: conversation_id || null,
+                wa_id,
+                rating: rating ?? null,
+              },
+            }),
+        );
 
         if (insertError) {
           embeddingError = insertError.message;
         } else {
-          await adminSupabase.from("feedback").update({ is_embedded: true }).eq("id", data.id);
+          await withAdminTimeout("admin.feedback.update", () =>
+            adminSupabase.from("feedback").update({ is_embedded: true }).eq("id", data.id),
+          );
         }
       } catch (error: any) {
+        if (isTimeoutError(error)) {
+          return c.json({ error: "Admin write timeout" }, 503);
+        }
         embeddingError = error.message || "Embedding failed";
       }
     }
@@ -616,7 +691,15 @@ admin.get("/knowledge", async (c) => {
 });
 
 admin.post("/knowledge", async (c) => {
-  const body = await c.req.json();
+  let body;
+  try {
+    body = await withAdminTimeout("admin.knowledge.parse", () => c.req.json());
+  } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ error: "Admin write timeout" }, 503);
+    }
+    return c.json({ error: "Failed to parse request", message: error.message }, 500);
+  }
   const parsed = knowledgeSchema.safeParse(body);
   if (!parsed.success) {
     return queryValidationError(c, parsed.error.issues);
@@ -624,14 +707,16 @@ admin.post("/knowledge", async (c) => {
   const { content, metadata } = parsed.data;
 
   if (!SHOULD_EMBED_SYNC) {
-    const { data, error } = await adminSupabase
-      .from("documents")
-      .insert({
-        content,
-        metadata: metadata || {},
-      })
-      .select()
-      .single();
+    const { data, error } = await withAdminTimeout("admin.knowledge.insert", () =>
+      adminSupabase
+        .from("documents")
+        .insert({
+          content,
+          metadata: metadata || {},
+        })
+        .select()
+        .single(),
+    );
 
     if (error) {
       return c.json({ error: "Failed to insert knowledge", message: error.message }, 500);
@@ -641,18 +726,22 @@ admin.post("/knowledge", async (c) => {
   }
 
   try {
-    const embedding = await getTextEmbedding(content, {
-      timeoutMs: EMBEDDING_TIMEOUT_MS,
-    });
-    const { data, error } = await adminSupabase
-      .from("documents")
-      .insert({
-        content,
-        embedding,
-        metadata: metadata || {},
-      })
-      .select()
-      .single();
+    const embedding = await withAdminTimeout("admin.knowledge.embed", () =>
+      getTextEmbedding(content, {
+        timeoutMs: EMBEDDING_TIMEOUT_MS,
+      }),
+    );
+    const { data, error } = await withAdminTimeout("admin.knowledge.insert", () =>
+      adminSupabase
+        .from("documents")
+        .insert({
+          content,
+          embedding,
+          metadata: metadata || {},
+        })
+        .select()
+        .single(),
+    );
 
     if (error) {
       return c.json({ error: "Failed to insert knowledge", message: error.message }, 500);
@@ -660,6 +749,9 @@ admin.post("/knowledge", async (c) => {
 
     return c.json({ data }, 201);
   } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ error: "Admin write timeout" }, 503);
+    }
     return c.json({ error: "Embedding failed", message: error.message }, 500);
   }
 });
@@ -726,7 +818,15 @@ admin.get("/translations", async (c) => {
 });
 
 admin.post("/translations", async (c) => {
-  const body = await c.req.json();
+  let body;
+  try {
+    body = await withAdminTimeout("admin.translations.parse", () => c.req.json());
+  } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ error: "Admin write timeout" }, 503);
+    }
+    return c.json({ error: "Failed to parse request", message: error.message }, 500);
+  }
   const parsed = translationSchema.safeParse(body);
   if (!parsed.success) {
     return queryValidationError(c, parsed.error.issues);
@@ -734,29 +834,43 @@ admin.post("/translations", async (c) => {
   const { source_text, source_language, target_language, translated_text, context, verified, created_by } =
     parsed.data;
 
-  const { data, error } = await adminSupabase
-    .from("translations")
-    .insert({
-      source_text,
-      source_language,
-      target_language,
-      translated_text,
-      context: context ?? null,
-      verified: Boolean(verified),
-      created_by: created_by ?? null,
-    })
-    .select()
-    .single();
+  let insertResult;
+  try {
+    insertResult = await withAdminTimeout("admin.translations.insert", () =>
+      adminSupabase
+        .from("translations")
+        .insert({
+          source_text,
+          source_language,
+          target_language,
+          translated_text,
+          context: context ?? null,
+          verified: Boolean(verified),
+          created_by: created_by ?? null,
+        })
+        .select()
+        .single(),
+    );
+  } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ error: "Admin write timeout" }, 503);
+    }
+    return c.json({ error: "Failed to insert translation", message: error.message }, 500);
+  }
+
+  const { data, error } = insertResult;
 
   // If duplicate, return existing translation
   if (error && error.code === "23505") {
-    const { data: existing } = await adminSupabase
-      .from("translations")
-      .select("*")
-      .eq("source_text", source_text)
-      .eq("source_language", source_language)
-      .eq("target_language", target_language)
-      .single();
+    const { data: existing } = await withAdminTimeout("admin.translations.select", () =>
+      adminSupabase
+        .from("translations")
+        .select("*")
+        .eq("source_text", source_text)
+        .eq("source_language", source_language)
+        .eq("target_language", target_language)
+        .single(),
+    );
 
     if (existing) {
       return c.json({ data: existing, existing: true }, 200);
@@ -867,3 +981,20 @@ admin.post("/conversations", async (c) => {
 });
 
 export default admin;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`${label} timeout after ${ms}ms`));
+    }, ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
