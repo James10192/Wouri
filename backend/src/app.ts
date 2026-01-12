@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { timeout } from "hono/timeout";
+import { HTTPException } from "hono/http-exception";
 import { config } from "./lib/config";
 import webhooks from "./routes/webhooks";
 import test from "./routes/test";
@@ -39,7 +40,8 @@ const requestTimeoutMs = Math.max(
   parseInt(config.VERCEL_FUNCTION_TIMEOUT || "60000", 10) - 5000,
 );
 app.use("*", async (c, next) => {
-  if (c.req.path.startsWith("/chat")) {
+  const path = c.req.path;
+  if (path.startsWith("/chat") || path.startsWith("/admin")) {
     return next();
   }
   return timeout(requestTimeoutMs)(c, next);
@@ -92,6 +94,16 @@ if (config.NODE_ENV === "development") {
 
 app.onError((err, c) => {
   console.error("❌ Server error:", err);
+
+  if (err instanceof HTTPException) {
+    return c.json(
+      {
+        error: err.message,
+        timestamp: new Date().toISOString(),
+      },
+      err.status,
+    );
+  }
 
   return c.json(
     {
