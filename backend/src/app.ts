@@ -9,6 +9,7 @@ import test from "./routes/test";
 import models from "./routes/models";
 import admin from "./routes/admin";
 import chat from "./routes/chat";
+import cron from "./routes/cron";
 
 /**
  * Wouri Bot Backend
@@ -80,6 +81,9 @@ app.route("/chat", chat);
 
 // Admin API
 app.route("/admin", admin);
+
+// Cron jobs (Vercel)
+app.route("/cron", cron);
 
 // Test routes (Development only)
 if (config.NODE_ENV === "development") {

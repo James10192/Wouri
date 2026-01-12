@@ -32,6 +32,7 @@ export const envSchema = z.object({
 
   // Admin API
   ADMIN_API_KEY: z.string().min(32).optional(), // Minimum 32 characters for security
+  CRON_SECRET: z.string().min(16).optional(),
 
   // Timeout configuration (optional)
   VERCEL_FUNCTION_TIMEOUT: z.string().optional().default("60000"),
