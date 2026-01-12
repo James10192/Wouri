@@ -109,10 +109,10 @@ const isTimeoutError = (error: unknown) =>
   typeof (error as any)?.message === "string" &&
   (error as any).message.includes("timeout");
 
-const withAdminTimeout = async <T>(label: string, action: () => Promise<T>) => {
+const withAdminTimeout = async <T>(label: string, action: () => PromiseLike<T> | T): Promise<T> => {
   const start = Date.now();
   try {
-    return await withTimeout(action(), ADMIN_WRITE_TIMEOUT_MS, label);
+    return await withTimeout(Promise.resolve(action()), ADMIN_WRITE_TIMEOUT_MS, label);
   } finally {
     const duration = Date.now() - start;
     console.log(`🧭 [admin] ${label} ${duration}ms`);
