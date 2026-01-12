@@ -923,6 +923,57 @@ admin.get("/monitoring", async (c) => {
   return c.json({ data: { services: checks } });
 });
 
+admin.get("/diag/supabase-ping", async (c) => {
+  const start = Date.now();
+  try {
+    const response = await withAdminTimeout("admin.diag.supabase.select", () =>
+      adminSupabase.from("feedback").select("id").limit(1),
+    );
+
+    return c.json({
+      ok: !response.error,
+      error: response.error ?? null,
+      ms: Date.now() - start,
+    });
+  } catch (error: any) {
+    return c.json({
+      ok: false,
+      exception: error.message || "Unknown error",
+      ms: Date.now() - start,
+    });
+  }
+});
+
+admin.get("/diag/supabase-rest", async (c) => {
+  const start = Date.now();
+  const url = `${config.SUPABASE_URL}/rest/v1/feedback?select=id&limit=1`;
+  try {
+    const response = await withAdminTimeout("admin.diag.supabase.rest", () =>
+      fetch(url, {
+        headers: {
+          apikey: config.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${config.SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }),
+    );
+
+    const text = await response.text();
+    return c.json({
+      ok: response.ok,
+      status: response.status,
+      ms: Date.now() - start,
+      body: text,
+    });
+  } catch (error: any) {
+    return c.json({
+      ok: false,
+      exception: error.message || "Unknown error",
+      ms: Date.now() - start,
+    });
+  }
+});
+
 admin.post("/embeddings/process", async (c) => {
   const parsed = paginationSchema.safeParse({
     limit: c.req.query("limit"),
