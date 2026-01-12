@@ -26,6 +26,7 @@ const ADMIN_WRITE_TIMEOUT_MS = Math.min(
 );
 const SHOULD_EMBED_SYNC = !process.env["VERCEL"];
 const USE_MINIMAL_RETURN = Boolean(process.env["VERCEL"]);
+const minimalInsertOptions = USE_MINIMAL_RETURN ? ({ returning: "minimal" } as any) : undefined;
 
 const paginationSchema = z.object({
   limit: z.coerce.number().int().positive().max(MAX_LIMIT).optional(),
@@ -417,7 +418,7 @@ admin.post("/etl", async (c) => {
                 content: doc.content,
                 metadata: doc.metadata || {},
               },
-              USE_MINIMAL_RETURN ? { returning: "minimal" } : undefined,
+              minimalInsertOptions,
             ),
         );
         if (error) {
@@ -442,7 +443,7 @@ admin.post("/etl", async (c) => {
               embedding,
               metadata: doc.metadata || {},
             },
-            USE_MINIMAL_RETURN ? { returning: "minimal" } : undefined,
+            minimalInsertOptions,
           ),
       );
       if (error) {
@@ -547,7 +548,7 @@ admin.post("/feedback", async (c) => {
             comment: comment ?? null,
             is_embedded: SHOULD_EMBED_SYNC && Boolean(comment),
           },
-          { returning: "minimal" },
+          minimalInsertOptions,
         ),
       );
       if (response.error) {
@@ -604,7 +605,7 @@ admin.post("/feedback", async (c) => {
                   rating: rating ?? null,
                 },
               },
-              USE_MINIMAL_RETURN ? { returning: "minimal" } : undefined,
+              minimalInsertOptions,
             ),
       );
 
@@ -634,7 +635,7 @@ admin.post("/feedback", async (c) => {
                     rating: rating ?? null,
                   },
                 },
-                USE_MINIMAL_RETURN ? { returning: "minimal" } : undefined,
+                minimalInsertOptions,
               ),
         );
 
@@ -759,7 +760,7 @@ admin.post("/knowledge", async (c) => {
                 content,
                 metadata: metadata || {},
               },
-              { returning: "minimal" },
+              minimalInsertOptions,
             )
         : adminSupabase
             .from("documents")
@@ -797,7 +798,7 @@ admin.post("/knowledge", async (c) => {
                 embedding,
                 metadata: metadata || {},
               },
-              { returning: "minimal" },
+              minimalInsertOptions,
             )
         : adminSupabase
             .from("documents")
@@ -915,7 +916,7 @@ admin.post("/translations", async (c) => {
             verified: Boolean(verified),
             created_by: created_by ?? null,
           },
-          { returning: "minimal" },
+          minimalInsertOptions,
         ),
       );
     } else {
