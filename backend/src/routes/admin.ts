@@ -122,6 +122,15 @@ const logAdminError = (label: string, error: any) => {
   });
 };
 
+const isDuplicateTranslationError = (error: any) => {
+  const body = typeof error?.body === "string" ? error.body : "";
+  const message = typeof error?.message === "string" ? error.message : "";
+  return (
+    error?.status === 409 &&
+    (body.includes('"code":"23505"') || message.includes("23505"))
+  );
+};
+
 const isTimeoutError = (error: unknown) =>
   typeof (error as any)?.message === "string" &&
   (((error as any).message.includes("timeout")) || (error as any).name === "AbortError");
@@ -159,7 +168,12 @@ const supabaseRestInsert = async (
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`supabase rest insert failed (${response.status}): ${text}`);
+    const error = new Error(
+      `supabase rest insert failed (${response.status}): ${text}`,
+    ) as Error & { status?: number; body?: string };
+    error.status = response.status;
+    error.body = text;
+    throw error;
   }
 };
 
@@ -1029,21 +1043,42 @@ admin.post("/translations", async (c) => {
   let insertResult;
   try {
     if (USE_MINIMAL_RETURN) {
-      await withAdminTimeout("admin.translations.rest.insert", (signal) =>
-        supabaseRestInsert(
-          "translations",
-          {
-            source_text,
-            source_language,
-            target_language,
-            translated_text,
-            context: context ?? null,
-            verified: Boolean(verified),
-            created_by: created_by ?? null,
-          },
-          signal,
-        ),
-      );
+      try {
+        await withAdminTimeout("admin.translations.rest.insert", (signal) =>
+          supabaseRestInsert(
+            "translations",
+            {
+              source_text,
+              source_language,
+              target_language,
+              translated_text,
+              context: context ?? null,
+              verified: Boolean(verified),
+              created_by: created_by ?? null,
+            },
+            signal,
+          ),
+        );
+      } catch (error: any) {
+        if (isDuplicateTranslationError(error)) {
+          const { data: existing } = await withAdminTimeout(
+            "admin.translations.select",
+            (_signal) =>
+              adminSupabase
+                .from("translations")
+                .select("*")
+                .eq("source_text", source_text)
+                .eq("source_language", source_language)
+                .eq("target_language", target_language)
+                .single(),
+          );
+
+          if (existing) {
+            return c.json({ data: existing, existing: true }, 200);
+          }
+        }
+        throw error;
+      }
       insertResult = { data: { status: "ok" }, error: null };
     } else {
       insertResult = await withAdminTimeout("admin.translations.insert", (_signal) =>
