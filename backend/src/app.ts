@@ -84,8 +84,9 @@ app.route("/admin", admin);
 // Test routes (Development only)
 if (config.NODE_ENV === "development") {
   app.route("/test", test);
-  const debug = await import("./routes/debug");
-  app.route("/debug", debug.default);
+  import("./routes/debug")
+    .then((debug) => app.route("/debug", debug.default))
+    .catch((error) => console.warn("Failed to load debug routes:", error));
 }
 
 // ============================================================================
