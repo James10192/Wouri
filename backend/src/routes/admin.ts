@@ -91,6 +91,13 @@ const translationQuerySchema = z.object({
   verified_only: z.coerce.boolean().optional(),
 });
 
+const diagFeedbackSchema = z.object({
+  conversation_id: z.string().uuid().nullable().optional(),
+  wa_id: z.string().min(1),
+  rating: z.number().int().min(1).max(5).nullable().optional(),
+  comment: z.string().min(1).nullable().optional(),
+});
+
 const etlSchema = z.object({
   documents: z
     .array(
@@ -1211,6 +1218,48 @@ admin.post("/diag/supabase-rest-insert", async (c) => {
       exception: error.message || "Unknown error",
       ms: Date.now() - start,
     });
+  }
+});
+
+admin.post("/diag/feedback-rest", async (c) => {
+  const start = Date.now();
+  let body;
+  try {
+    body = await withAdminTimeout("admin.diag.feedback.parse", (_signal) => c.req.json());
+  } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ ok: false, error: "timeout", ms: Date.now() - start }, 503);
+    }
+    logAdminError("admin.diag.feedback.parse", error);
+    return c.json({ ok: false, error: error.message || "Invalid body" }, 400);
+  }
+
+  const parsed = diagFeedbackSchema.safeParse(body);
+  if (!parsed.success) {
+    return queryValidationError(c, parsed.error.issues);
+  }
+
+  try {
+    await withAdminTimeout("admin.diag.feedback.rest.insert", (signal) =>
+      supabaseRestInsert(
+        "feedback",
+        {
+          conversation_id: parsed.data.conversation_id || null,
+          wa_id: parsed.data.wa_id,
+          rating: parsed.data.rating ?? null,
+          comment: parsed.data.comment ?? null,
+          is_embedded: false,
+        },
+        signal,
+      ),
+    );
+    return c.json({ ok: true, ms: Date.now() - start });
+  } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ ok: false, error: "timeout", ms: Date.now() - start }, 503);
+    }
+    logAdminError("admin.diag.feedback.rest.insert", error);
+    return c.json({ ok: false, error: error.message || "Insert failed" }, 500);
   }
 });
 
