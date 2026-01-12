@@ -1132,6 +1132,14 @@ admin.get("/diag/supabase-ping", async (c) => {
   }
 });
 
+admin.get("/diag/config", (c) => {
+  return c.json({
+    adminWriteTimeoutMs: ADMIN_WRITE_TIMEOUT_MS,
+    useMinimalReturn: USE_MINIMAL_RETURN,
+    shouldEmbedSync: SHOULD_EMBED_SYNC,
+  });
+});
+
 admin.get("/diag/supabase-rest", async (c) => {
   const start = Date.now();
   const url = `${config.SUPABASE_URL}/rest/v1/feedback?select=id&limit=1`;
@@ -1154,6 +1162,32 @@ admin.get("/diag/supabase-rest", async (c) => {
       ms: Date.now() - start,
       body: text,
     });
+  } catch (error: any) {
+    return c.json({
+      ok: false,
+      exception: error.message || "Unknown error",
+      ms: Date.now() - start,
+    });
+  }
+});
+
+admin.post("/diag/supabase-rest-insert", async (c) => {
+  const start = Date.now();
+  try {
+    await withAdminTimeout("admin.diag.supabase.rest.insert", (signal) =>
+      supabaseRestInsert(
+        "feedback",
+        {
+          wa_id: "diag-user",
+          rating: 5,
+          comment: "diag insert",
+          is_embedded: false,
+        },
+        signal,
+      ),
+    );
+
+    return c.json({ ok: true, ms: Date.now() - start });
   } catch (error: any) {
     return c.json({
       ok: false,
