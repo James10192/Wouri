@@ -424,7 +424,7 @@ admin.get("/messages/stream", async (c) => {
 admin.post("/etl", async (c) => {
   let body;
   try {
-    body = await withAdminTimeout("admin.etl.parse", (_signal) => c.req.json());
+    body = await readJsonBody(c, "admin.etl");
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
@@ -596,7 +596,7 @@ admin.get("/feedback", async (c) => {
 admin.post("/feedback", async (c) => {
   let body;
   try {
-    body = await withAdminTimeout("admin.feedback.parse", (_signal) => c.req.json());
+    body = await readJsonBody(c, "admin.feedback");
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
@@ -853,7 +853,7 @@ admin.get("/knowledge", async (c) => {
 admin.post("/knowledge", async (c) => {
   let body;
   try {
-    body = await withAdminTimeout("admin.knowledge.parse", (_signal) => c.req.json());
+    body = await readJsonBody(c, "admin.knowledge");
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
@@ -1011,7 +1011,7 @@ admin.get("/translations", async (c) => {
 admin.post("/translations", async (c) => {
   let body;
   try {
-    body = await withAdminTimeout("admin.translations.parse", (_signal) => c.req.json());
+    body = await readJsonBody(c, "admin.translations");
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ error: "Admin write timeout" }, 503);
@@ -1225,7 +1225,7 @@ admin.post("/diag/feedback-rest", async (c) => {
   const start = Date.now();
   let body;
   try {
-    body = await withAdminTimeout("admin.diag.feedback.parse", (_signal) => c.req.json());
+    body = await readJsonBody(c, "admin.diag.feedback");
   } catch (error: any) {
     if (isTimeoutError(error)) {
       return c.json({ ok: false, error: "timeout", ms: Date.now() - start }, 503);
@@ -1307,7 +1307,16 @@ admin.post("/embeddings/process", async (c) => {
 
 // Optional: expose insert utility for scripts
 admin.post("/conversations", async (c) => {
-  const body = await c.req.json();
+  let body;
+  try {
+    body = await readJsonBody(c, "admin.conversations");
+  } catch (error: any) {
+    if (isTimeoutError(error)) {
+      return c.json({ error: "Admin write timeout" }, 503);
+    }
+    logAdminError("admin.conversations.parse", error);
+    return c.json({ error: "Failed to parse request", message: error.message }, 500);
+  }
   const parsed = conversationSchema.safeParse(body);
   if (!parsed.success) {
     return queryValidationError(c, parsed.error.issues);
@@ -1340,4 +1349,93 @@ async function withTimeoutAbort<T>(
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function readJsonBody<T = Record<string, unknown>>(
+  c: { req: { raw: Request } },
+  label: string,
+): Promise<T> {
+  return withAdminTimeout(`${label}.body`, (signal) => parseRequestJson(c.req.raw, signal));
+}
+
+async function parseRequestJson<T>(req: Request, signal: AbortSignal): Promise<T> {
+  const text = await readRequestText(req, signal);
+  if (!text) {
+    return {} as T;
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch (error: any) {
+    const parseError = new Error("Invalid JSON body");
+    parseError.cause = error;
+    throw parseError;
+  }
+}
+
+async function readRequestText(req: Request, signal: AbortSignal): Promise<string> {
+  if (!req.body) {
+    return "";
+  }
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+
+  const abortError = () => {
+    const error = new Error("Request body aborted");
+    (error as any).name = "AbortError";
+    return error;
+  };
+
+  const handleAbort = () => {
+    try {
+      reader.cancel();
+    } catch {
+      // Ignore cancel errors.
+    }
+  };
+
+  if (signal.aborted) {
+    handleAbort();
+    throw abortError();
+  }
+
+  signal.addEventListener("abort", handleAbort, { once: true });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (value) {
+        chunks.push(value);
+      }
+      if (done) {
+        break;
+      }
+      if (signal.aborted) {
+        throw abortError();
+      }
+    }
+  } catch (error) {
+    if (signal.aborted) {
+      throw abortError();
+    }
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", handleAbort);
+  }
+
+  if (chunks.length === 0) {
+    return "";
+  }
+
+  let size = 0;
+  for (const chunk of chunks) {
+    size += chunk.length;
+  }
+  const merged = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return new TextDecoder().decode(merged);
 }
