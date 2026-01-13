@@ -43,6 +43,12 @@ jobs:
           export ADMIN_API_KEY="${{ secrets.ADMIN_API_KEY }}"
           bash scripts/test-admin-endpoints.sh
 
+      - name: Trigger embeddings batch
+        if: ${{ env.ADMIN_API_KEY != '' && env.API_BASE_URL != '' }}
+        run: |
+          curl -s -X POST "${{ secrets.API_BASE_URL }}/admin/embeddings/process?limit=25" \
+            -H "x-admin-key: ${{ secrets.ADMIN_API_KEY }}"
+
       - name: Notify on failure
         if: failure()
         run: |

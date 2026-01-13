@@ -6,12 +6,6 @@
       "maxDuration": 60
     }
   },
-  "crons": [
-    {
-      "path": "/cron/embeddings?limit=25&key=b6af60c1aa2d614a4ac2602992f58398b405",
-      "schedule": "*/15 * * * *"
-    }
-  ],
   "rewrites": [
     {
       "source": "/(.*)",

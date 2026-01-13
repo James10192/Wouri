@@ -453,6 +453,7 @@ admin.post("/etl", async (c) => {
 
   const { documents, dry_run } = parsed.data;
   const results: Array<{ index: number; status: string; error?: string; embedding_pending?: boolean }> = [];
+  let shouldTriggerEmbeddings = false;
 
   if (dry_run) {
     return c.json({
@@ -479,6 +480,7 @@ admin.post("/etl", async (c) => {
             ),
           );
           results.push({ index: i, status: "ok", embedding_pending: true });
+          shouldTriggerEmbeddings = true;
         } else {
           const { error } = await withAdminTimeout(`admin.etl.insert.${i}`, (_signal) =>
             adminSupabase
@@ -495,6 +497,7 @@ admin.post("/etl", async (c) => {
             results.push({ index: i, status: "error", error: error.message });
           } else {
             results.push({ index: i, status: "ok", embedding_pending: true });
+            shouldTriggerEmbeddings = true;
           }
         }
         continue;
@@ -551,6 +554,10 @@ admin.post("/etl", async (c) => {
         error: error.message || "Embedding failed",
       });
     }
+  }
+
+  if (shouldTriggerEmbeddings) {
+    queueEmbeddingProcess(5, "etl");
   }
 
   return c.json({
@@ -625,6 +632,7 @@ admin.post("/feedback", async (c) => {
   const { conversation_id, wa_id, rating, comment } = parsed.data;
 
   let data;
+  let shouldTriggerEmbeddings = false;
   try {
     if (USE_MINIMAL_RETURN) {
       await withAdminTimeout("admin.feedback.rest.insert", (signal) =>
@@ -691,6 +699,7 @@ admin.post("/feedback", async (c) => {
               signal,
             ),
           );
+          shouldTriggerEmbeddings = true;
         } catch (error: any) {
           embeddingError = error.message || "Insert failed";
         }
@@ -716,6 +725,8 @@ admin.post("/feedback", async (c) => {
 
         if (insertError) {
           embeddingError = insertError.message;
+        } else {
+          shouldTriggerEmbeddings = true;
         }
       }
     } else {
@@ -783,6 +794,10 @@ admin.post("/feedback", async (c) => {
         embeddingError = error.message || "Embedding failed";
       }
     }
+  }
+
+  if (shouldTriggerEmbeddings) {
+    queueEmbeddingProcess(5, "feedback");
   }
 
   return c.json(
@@ -893,6 +908,7 @@ admin.post("/knowledge", async (c) => {
           signal,
         ),
       );
+      queueEmbeddingProcess(5, "knowledge");
       return c.json({ data: { status: "ok" }, embeddingStatus: "pending" }, 201);
     }
 
@@ -911,6 +927,7 @@ admin.post("/knowledge", async (c) => {
       return c.json({ error: "Failed to insert knowledge", message: response.error.message }, 500);
     }
 
+    queueEmbeddingProcess(5, "knowledge");
     return c.json({ data: response.data, embeddingStatus: "pending" }, 201);
   }
 
@@ -1307,37 +1324,13 @@ admin.post("/embeddings/process", async (c) => {
   }
   const limit = parsed.data.limit ?? 10;
 
-  const { data, error } = await adminSupabase
-    .from("documents")
-    .select("id, content")
-    .is("embedding", null)
-    .order("created_at", { ascending: true })
-    .limit(limit);
-
-  if (error) {
-    return c.json({ error: "Failed to load pending embeddings", message: error.message }, 500);
+  try {
+    const data = await processEmbeddingsBatch(limit);
+    return c.json({ data });
+  } catch (error: any) {
+    logAdminError("admin.embeddings.process", error);
+    return c.json({ error: "Failed to process embeddings", message: error.message }, 500);
   }
-
-  const results: Array<{ id: string; status: string; error?: string }> = [];
-  for (const doc of data || []) {
-    try {
-      const embedding = await getTextEmbedding(doc.content, {
-        timeoutMs: EMBEDDING_TIMEOUT_MS,
-      });
-      const { error: updateError } = await adminSupabase
-        .from("documents")
-        .update({ embedding })
-        .eq("id", doc.id);
-      if (updateError) {
-        throw new Error(updateError.message);
-      }
-      results.push({ id: doc.id, status: "ok" });
-    } catch (error: any) {
-      results.push({ id: doc.id, status: "error", error: error.message });
-    }
-  }
-
-  return c.json({ data: { processed: results.length, results } });
 });
 
 // Optional: expose insert utility for scripts
@@ -1363,6 +1356,52 @@ admin.post("/conversations", async (c) => {
     return c.json({ error: "Failed to create conversation", message: error.message }, 500);
   }
 });
+
+const processEmbeddingsBatch = async (limit: number) => {
+  const { data, error } = await adminSupabase
+    .from("documents")
+    .select("id, content")
+    .is("embedding", null)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const results: Array<{ id: string; status: string; error?: string }> = [];
+  for (const doc of data || []) {
+    try {
+      const embedding = await getTextEmbedding(doc.content, {
+        timeoutMs: EMBEDDING_TIMEOUT_MS,
+      });
+      const { error: updateError } = await adminSupabase
+        .from("documents")
+        .update({ embedding })
+        .eq("id", doc.id);
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+      results.push({ id: doc.id, status: "ok" });
+    } catch (error: any) {
+      results.push({ id: doc.id, status: "error", error: error.message });
+    }
+  }
+
+  return { processed: results.length, results };
+};
+
+const queueEmbeddingProcess = (limit: number, source: string) => {
+  if (SHOULD_EMBED_SYNC) {
+    return;
+  }
+  const batchLimit = Math.min(Math.max(limit, 1), 50);
+  setTimeout(() => {
+    processEmbeddingsBatch(batchLimit).catch((error) => {
+      console.warn(`⚠️ embedding batch failed (${source})`, error);
+    });
+  }, 0);
+};
 
 export default admin;
 
